@@ -359,6 +359,7 @@ QA4SM_EXCLUSIVE_METRICS = {
     'rho': 'Spearman\'s rho',
     'p_rho': 'Spearman\'s rho p-value',
     'status': '# status',
+    'ts_slope' : 'Robust median slope estimator',
 }
 
 _metric_name = {**COMMON_METRICS, **READER_EXCLUSIVE_METRICS, **TC_METRICS}
@@ -783,6 +784,20 @@ TEMPORAL_SUB_WINDOWS = {
         "Dec": [[12, 1], [12, 31]],
     }
 }
+
+def add_annual_subwindows(years):
+    # Loops through each year and create a subwindow for the entire year
+    annual_subwindows = {}
+    for year in years:
+        annual_subwindows[str(year)] = [
+            [year, 1, 1],
+            [year, 12, 31]
+        ]
+    TEMPORAL_SUB_WINDOWS["custom"] = annual_subwindows
+
+
+#years = [2008, 2009, 2010]
+#add_annual_subwindows(years)
 
 CLUSTERED_BOX_PLOT_STYLE = {
     'fig_params': {

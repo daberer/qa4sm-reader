@@ -289,6 +289,15 @@ class TemporalSubWindowsCreator(TemporalSubWindowsDefault):
         except Exception as e:
             print(f'Error: {e}')
             return None
+        
+    def remove_temp_sub_wndws(self) -> None:
+        '''Removes all existing custom temporal sub-windows.
+
+        This method clears both the `custom_temporal_sub_windows` and the `additional_temp_sub_wndws_container`.
+        '''
+        self.custom_temporal_sub_windows.clear()
+        self.additional_temp_sub_wndws_container.clear()
+        print("All custom temporal sub-windows have been removed.")        
 
     @property
     def names(self) -> List[str]:

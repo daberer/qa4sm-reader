@@ -217,6 +217,18 @@ class Pytesmo2Qa4smResultsTranscriber:
             self.transcribed_dataset = self.transcribed_dataset.drop_dims(
                 'obs')
 
+    def mask_redundant_tsw_values(self) -> None:
+        """
+        For all variables starting with 'ts_slope_', replace all tsw values ('2010', '2011', etc.) with NaN 
+        except for the default tsw.
+        """
+        ts_slope_vars = [var for var in self.transcribed_dataset if var.startswith("ts_slope_")]
+
+        for var in ts_slope_vars:
+            if TEMPORAL_SUB_WINDOW_NC_COORD_NAME in self.transcribed_dataset[var].dims:              
+                mask = self.transcribed_dataset[var][TEMPORAL_SUB_WINDOW_NC_COORD_NAME] == DEFAULT_TSW
+                self.transcribed_dataset[var] = self.transcribed_dataset[var].where(mask, other=np.nan)
+
     @staticmethod
     def update_dataset_var(ds: xr.Dataset, var: str, coord_key: str,
                            coord_val: str, data_vals: List) -> xr.Dataset:
@@ -250,14 +262,13 @@ class Pytesmo2Qa4smResultsTranscriber:
 
     def get_transcribed_dataset(self) -> xr.Dataset:
         """
-        Get the transcribed dataset, containing all metric and non-metric data provided by the pytesmo results. Metadata
-        is not yet included.
+        Get the transcribed dataset, containing all metric and non-metric data provided by the pytesmo results. 
 
 
         Returns
         -------
         xr.Dataset
-            The transcribed, metadata-less dataset.
+            The transcribed dataset.
         """
         self.only_default_case, self.intra_annual_slices = self.temporal_sub_windows_checker(
         )
@@ -274,7 +285,7 @@ class Pytesmo2Qa4smResultsTranscriber:
                 _tsw, new_name = new_name.split(TEMPORAL_SUB_WINDOW_SEPARATOR)
 
             if new_name not in self.transcribed_dataset:
-                # takes the data associated with the metric new_name and adds it as a new variabel
+                # takes the data associated with the metric new_name and adds it as a new variable
                 # more precisely, it assigns copies of this data to each temporal sub-window, which is the new dimension
                 self.transcribed_dataset[new_name] = self.pytesmo_results[
                     var_name].expand_dims(
@@ -303,6 +314,7 @@ class Pytesmo2Qa4smResultsTranscriber:
         self.get_pytesmo_attrs()
         self.handle_n_obs()
         self.drop_obs_dim()
+        self.mask_redundant_tsw_values()
 
         self.transcribed_dataset[
             TEMPORAL_SUB_WINDOW_NC_COORD_NAME].attrs = dict(
