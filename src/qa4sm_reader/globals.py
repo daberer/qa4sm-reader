@@ -358,6 +358,8 @@ READER_EXCLUSIVE_METRICS = {
 QA4SM_EXCLUSIVE_METRICS = {
     'rho': 'Spearman\'s rho',
     'p_rho': 'Spearman\'s rho p-value',
+    # 'tau': 'Kendall rank correlation',        # currently QA4SM is hardcoded not to calculate kendall tau
+    # 'p_tau': 'Kendall tau p-value',           # needs to be changed once tau is calculated again
     'status': '# status',
     'ts_slope' : 'Robust median slope estimator',
 }
@@ -821,6 +823,8 @@ CLUSTERED_BOX_PLOT_SAVENAME = 'comparison_boxplot_{metric}.{filetype}'
 
 # netCDF transcription related settings
 # =====================================================
+OLD_NCFILE_SUFFIX = '.old'
+
 IMPLEMENTED_COMPRESSIONS = ['zlib']
 
 ALLOWED_COMPRESSION_LEVELS = [None, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9]

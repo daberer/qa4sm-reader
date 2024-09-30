@@ -1,4 +1,6 @@
 from functools import wraps
+import inspect
+import logging
 from typing import Any, Callable, TypeVar, Union, Dict, List
 from re import match as regex_match
 import qa4sm_reader.globals
@@ -36,6 +38,19 @@ def note(note_text: Any) -> Callable[[T], T]:
         return wrapper
 
     return decorator
+
+
+def log_function_call(func: Callable) -> Callable[[T], T]:
+    '''Decorator that logs the function call with its arguments and their values.'''
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        frame = inspect.currentframe().f_back
+        func_name = frame.f_code.co_name
+        local_vars = frame.f_locals
+        logging.info(f'**{func_name}**({", ".join(f"{k}={v}" for k, v in local_vars.items())})')
+        return func(*args, **kwargs)
+    return wrapper
+
 
 def transcribe(file_path: Union[str, PosixPath]) ->  Union[None, xr.Dataset]:
     '''If the dataset is not in the new format, transcribe it to the new format.

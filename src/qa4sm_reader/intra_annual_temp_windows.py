@@ -8,7 +8,17 @@ import os
 from datetime import datetime
 import json
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+import numpy as np
+
+
+class InvalidTemporalSubWindowError(Exception):
+    '''Exception raised when an invalid temporal sub-window is provided.'''
+
+    def __init__(self, tsw, valid_tsw):
+        super().__init__(
+            f'The provided temporal sub-window ({tsw}) is invalid. Please provide one of these valid temporal sub-windows: {valid_tsw}.'
+        )
+
 
 class TemporalSubWindowsDefault(ABC):
     '''
@@ -63,24 +73,55 @@ class TemporalSubWindowsDefault(ABC):
         pass
 
 
-@dataclass(frozen=True)
 class NewSubWindow:
     """
-    Dataclass to store the name and the begin and end date of a new temporal sub-window.
+    Class to store the name and the begin and end date of a new temporal sub-window.
 
     Parameters
     ----------
     name : str
         Name of the new temporal sub-window.
-    begin_date : datetime
+    begin_date : datetime or YearlessDatetime
         Begin date of the new temporal sub-window.
-    end_date : datetime
+    end_date : datetime or YearlessDatetime
         End date of the new temporal sub-window.
 
     """
-    name: str
-    begin_date: datetime
-    end_date: datetime
+
+    def __init__(self, name: str, begin_date: Union[datetime,
+                                                    YearlessDatetime],
+                 end_date: Union[datetime, YearlessDatetime]) -> None:
+        self.name = str(name)
+
+        if type(begin_date) != type(end_date):
+            raise TypeError(
+                f"`begin_date` and `end_date` must be of the same type, not '{type(begin_date).__name__}' and '{type(end_date).__name__}'"
+            )
+
+        if not isinstance(begin_date, (datetime, YearlessDatetime)):
+            raise TypeError(
+                f"`begin_date` must be of type 'datetime' or 'YearlessDatetime', not '{type(begin_date).__name__}'"
+            )
+        else:
+            self.begin_date = begin_date
+        if not isinstance(end_date, (datetime, YearlessDatetime)):
+            raise TypeError(
+                f"`end_date` must be of type 'datetime' or 'YearlessDatetime', not '{type(end_date).__name__}'"
+            )
+        else:
+            self.end_date = end_date
+
+        if isinstance(begin_date, datetime) and isinstance(
+                end_date, datetime) and self.begin_date > self.end_date:
+            raise ValueError(
+                f"begin_date ({self.begin_date}) must be before end_date ({self.end_date})"
+            )
+
+    def __str__(self) -> str:
+        return f'{self.__class__.__name__}({self.name}, {self.begin_date}, {self.end_date})'
+
+    def __repr__(self) -> str:
+        return f'{self.__class__.__name__}(name={self.name}, begin_date={self.begin_date}, end_date={self.end_date})'
 
     @property
     def begin_date_pretty(self) -> str:
@@ -91,7 +132,6 @@ class NewSubWindow:
         -------
         str
             Pretty formatted begin date.
-
         """
         return self.begin_date.strftime('%Y-%m-%d')
 
@@ -104,9 +144,9 @@ class NewSubWindow:
         -------
         str
             Pretty formatted end date.
-
         """
         return self.end_date.strftime('%Y-%m-%d')
+
 
 class TemporalSubWindowsCreator(TemporalSubWindowsDefault):
     '''Class to create custom temporal sub-windows, based on the default definitions.
@@ -125,7 +165,7 @@ class TemporalSubWindowsCreator(TemporalSubWindowsDefault):
                  temporal_sub_window_type: Optional[str] = 'months',
                  overlap: Optional[int] = 0,
                  custom_file: Optional[str] = None):
-        self.overlap = overlap
+        self.overlap = int(np.round(overlap))
         self.temporal_sub_window_type = temporal_sub_window_type
         super().__init__(custom_file=custom_file)
 
@@ -135,6 +175,8 @@ class TemporalSubWindowsCreator(TemporalSubWindowsDefault):
                 f'Invalid custom file path. Please provide a valid JSON file containing the temporal sub-window definitions.'
             )
         elif self.temporal_sub_window_type not in self.available_temp_sub_wndws:
+            raise InvalidTemporalSubWindowError(self.temporal_sub_window_type,
+                                                self.available_temp_sub_wndws)
             raise KeyError(
                 f'Invalid temporal sub-window type. Available types are: {self.available_temp_sub_wndws}'
             )
@@ -230,7 +272,8 @@ class TemporalSubWindowsCreator(TemporalSubWindowsDefault):
             self.temporal_sub_windows_dict = TEMPORAL_SUB_WINDOWS
             return list(self.temporal_sub_windows_dict.keys())
         elif os.path.isfile(self.custom_file):
-            self.temporal_sub_windows_dict = self._load_json_data(self.custom_file)
+            self.temporal_sub_windows_dict = self._load_json_data(
+                self.custom_file)
             return list(self.temporal_sub_windows_dict.keys())
         else:
             return None
@@ -259,9 +302,61 @@ class TemporalSubWindowsCreator(TemporalSubWindowsDefault):
         }
 
     def add_temp_sub_wndw(
-            self,
-            new_temp_sub_wndw: NewSubWindow) -> Union[None, Dict[str, TsDistributor]]:
+        self,
+        new_temp_sub_wndw: NewSubWindow,
+        insert_as_first_wndw: Optional[bool] = False
+    ) -> Union[None, Dict[str, TsDistributor]]:
         '''Adds a new custom temporal sub-window to the existing ones.
+
+        Parameters
+        ----------
+        new_temp_sub_wndw : NewSubWindow
+            Dataclass containing the name, begin date, and end date of the new temporal sub-window.
+        insert_as_first_wndw : bool, optional
+            If True, the new temporal sub-window will be inserted as new first element in `TemporalSubWindowsCreator.custom_temporal_sub_windows`. Default is False.
+
+        Returns
+        -------
+        Union[None, Dict[str, TsDistributor]]
+            None if the new temp_sub_wndw already exists. Otherwise, the dictionary containing the custom temporal sub-window definitions.
+
+        '''
+
+        self.additional_temp_sub_wndws_container[
+            new_temp_sub_wndw.name] = new_temp_sub_wndw
+        try:
+            if new_temp_sub_wndw.name in self.custom_temporal_sub_windows:
+                print(
+                    f'temporal sub-window "{new_temp_sub_wndw.name}" already exists. Overwriting not possible.\
+                         Please choose a different name. If you want to overwrite the existing temporal sub-window, \
+                             use the `overwrite_temp_sub_wndw` method instead.'
+                )
+                return None
+            elif insert_as_first_wndw:
+                _new_first_element = {
+                    new_temp_sub_wndw.name:
+                    TsDistributor(date_ranges=[(new_temp_sub_wndw.begin_date,
+                                                new_temp_sub_wndw.end_date)])
+                }
+                self.custom_temporal_sub_windows = {
+                    **_new_first_element,
+                    **self.custom_temporal_sub_windows
+                }
+                return self.custom_temporal_sub_windows
+            else:
+                self.custom_temporal_sub_windows[
+                    new_temp_sub_wndw.name] = TsDistributor(
+                        date_ranges=[(new_temp_sub_wndw.begin_date,
+                                      new_temp_sub_wndw.end_date)])
+                return self.custom_temporal_sub_windows
+        except Exception as e:
+            print(f'Error: {e}')
+            return None
+
+    def overwrite_temp_sub_wndw(
+        self, new_temp_sub_wndw: NewSubWindow
+    ) -> Union[None, Dict[str, TsDistributor]]:
+        '''Overwrites an existing temporal sub-window with a new definition.
 
         Parameters
         ----------
@@ -271,21 +366,38 @@ class TemporalSubWindowsCreator(TemporalSubWindowsDefault):
         Returns
         -------
         Union[None, Dict[str, TsDistributor]]
-            None if the new temp_sub_wndw already exists. Otherwise, the dictionary containing the custom temporal sub-window definitions.
+            None if the new temp_sub_wndw does not exist. Otherwise, the dictionary containing the custom temporal sub-window definitions.
 
         '''
 
-        self.additional_temp_sub_wndws_container[new_temp_sub_wndw.name] = new_temp_sub_wndw
+        self.additional_temp_sub_wndws_container[
+            new_temp_sub_wndw.name] = new_temp_sub_wndw
         try:
-            if new_temp_sub_wndw.name in self.custom_temporal_sub_windows:
+            if new_temp_sub_wndw.name not in self.custom_temporal_sub_windows:
                 print(
-                    f'temporal sub-window "{new_temp_sub_wndw.name}" already exists. Overwriting not possible.\
-                         Please choose a different name.')
+                    f'temporal sub-window "{new_temp_sub_wndw.name}" does not exist. Overwriting not possible.\
+                         Please choose a different name. If you want to add a new temporal sub-window, \
+                             use the `add_temp_sub_wndw` method instead.')
                 return None
-            else:
-                self.custom_temporal_sub_windows[new_temp_sub_wndw.name] = TsDistributor(
-                    date_ranges=[(new_temp_sub_wndw.begin_date, new_temp_sub_wndw.end_date)])
+            elif isinstance(
+                    new_temp_sub_wndw.begin_date, datetime
+            ) and isinstance(
+                    new_temp_sub_wndw.end_date, datetime
+            ) and new_temp_sub_wndw.begin_date < new_temp_sub_wndw.end_date:
+                self.custom_temporal_sub_windows[
+                    new_temp_sub_wndw.name] = TsDistributor(
+                        date_ranges=[(new_temp_sub_wndw.begin_date,
+                                      new_temp_sub_wndw.end_date)])
                 return self.custom_temporal_sub_windows
+            elif isinstance(new_temp_sub_wndw.begin_date,
+                            YearlessDatetime) and isinstance(
+                                new_temp_sub_wndw.end_date, YearlessDatetime):
+                self.custom_temporal_sub_windows[
+                    new_temp_sub_wndw.name] = TsDistributor(
+                        yearless_date_ranges=[(new_temp_sub_wndw.begin_date,
+                                               new_temp_sub_wndw.end_date)])
+                return self.custom_temporal_sub_windows
+
         except Exception as e:
             print(f'Error: {e}')
             return None
@@ -314,7 +426,6 @@ class TemporalSubWindowsCreator(TemporalSubWindowsDefault):
         '''
 
         return list(self.custom_temporal_sub_windows.keys())
-
 
     @property
     def metadata(self) -> Dict:

@@ -9,14 +9,15 @@ dependencies:
 - numpy
 - matplotlib
 - cartopy>=0.21
+- pyproj
 - h5netcdf
 - pip
 - pip:
     - parse
     - colorcet
+    - scipy
     - seaborn
     - pygeogrids
-    - pyproj
     - pytest
     - pytest-cov
     - pytesmo

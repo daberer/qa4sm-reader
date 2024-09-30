@@ -73,3 +73,4 @@ tests/test_data/out/*
 .coverage*
 .artifacts/*
 .vscode
+.logs

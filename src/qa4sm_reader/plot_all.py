@@ -145,6 +145,8 @@ def plot_all(filepath: str,
     #$$
     # ? move somewhere else?
     fnames_cbplot = []
+    if isinstance(out_type, str):
+        out_type = [out_type]
     metrics_not_to_plot = list(set(chain(globals._metadata_exclude, globals.metric_groups[3], ['n_obs']))) # metadata, tcol metrics, n_obs
     if globals.DEFAULT_TSW in periods and len(periods) > 1:
         cbp = QA4SMCompPlotter(filepath)

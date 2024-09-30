@@ -1381,6 +1381,7 @@ def _dict2df(to_plot_dict: dict, meta_key: str) -> pd.DataFrame:
         range_grouped = pd.concat(range_grouped, axis=0)
         to_plot_df.append(range_grouped)
     to_plot_df = pd.concat(to_plot_df, axis=0)
+
     return to_plot_df
 
 

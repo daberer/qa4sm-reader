@@ -1839,7 +1839,7 @@ class QA4SMCompPlotter:
             ['y_labelsize'],
         )
 
-        spth = [Path(f"{globals.CLUSTERED_BOX_PLOT_SAVENAME.format(metric = chosen_metric, filetype = '.png')}")]
+        spth = [Path(f"{globals.CLUSTERED_BOX_PLOT_SAVENAME.format(metric = chosen_metric, filetype = 'png')}")]
         if out_name:
             spth = out_name
 

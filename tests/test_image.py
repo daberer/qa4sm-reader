@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 import os
-from re import M
 import numpy as np
 import pytest
 

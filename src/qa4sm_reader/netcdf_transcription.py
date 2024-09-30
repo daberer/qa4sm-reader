@@ -2,13 +2,25 @@ import xarray as xr
 import numpy as np
 from typing import Any, List, Dict, Optional, Union, Tuple
 import os
+import calendar
+import warnings
 
-from qa4sm_reader.intra_annual_temp_windows import TemporalSubWindowsCreator
+from qa4sm_reader.intra_annual_temp_windows import TemporalSubWindowsCreator, InvalidTemporalSubWindowError
 from qa4sm_reader.globals import    METRICS, TC_METRICS, NON_METRICS, METADATA_TEMPLATE, \
                                     IMPLEMENTED_COMPRESSIONS, ALLOWED_COMPRESSION_LEVELS, \
                                     INTRA_ANNUAL_METRIC_TEMPLATE, INTRA_ANNUAL_TCOL_METRIC_TEMPLATE, \
                                     TEMPORAL_SUB_WINDOW_SEPARATOR, DEFAULT_TSW, TEMPORAL_SUB_WINDOW_NC_COORD_NAME, \
-                                    MAX_NUM_DS_PER_VAL_RUN, DATASETS
+                                    MAX_NUM_DS_PER_VAL_RUN, DATASETS, OLD_NCFILE_SUFFIX
+
+
+class TemporalSubWindowMismatchError(Exception):
+    '''Exception raised when the temporal sub-windows provided do not match the ones present in the provided netCDF file.'''
+
+    def __init__(self, provided, expected):
+        super().__init__(
+            f'The temporal sub-windows provided ({provided}) do not match the ones present in the provided netCDF file ({expected}).'
+        )
+
 
 class Pytesmo2Qa4smResultsTranscriber:
     """
@@ -25,13 +37,44 @@ class Pytesmo2Qa4smResultsTranscriber:
         the temporal sub-windows are used as provided by the TemporalSubWindowsCreator instance.
     keep_pytesmo_ncfile : Optional[bool]
         Whether to keep the original pytesmo results netCDF file. Default is False. \
-            If True, the original file is kept and indicated by the suffix '.old'.
+            If True, the original file is kept and indicated by the suffix `qa4sm_reader.globals.OLD_NCFILE_SUFFIX`.
     """
 
     def __init__(self,
                  pytesmo_results: str,
-                 intra_annual_slices: Union[None, TemporalSubWindowsCreator] = None,
+                 intra_annual_slices: Union[None,
+                                            TemporalSubWindowsCreator] = None,
                  keep_pytesmo_ncfile: Optional[bool] = False):
+
+        self.pytesmo_ncfile = f'{pytesmo_results}'
+        if not os.path.isfile(pytesmo_results):
+            self.exists = False
+            raise FileNotFoundError(
+                f'\n\nFile {pytesmo_results} not found. Please provide a valid path to a pytesmo results netCDF file.'
+            )
+            return None
+        else:
+            self.exists = True
+
+        # make sure the intra-annual slices from the argument are the same as the ones present in the pytesmo results
+        pytesmo_results_tsws = Pytesmo2Qa4smResultsTranscriber.get_tsws_from_ncfile(
+            pytesmo_results)
+        if isinstance(intra_annual_slices, TemporalSubWindowsCreator):
+            provided_tsws = intra_annual_slices.names
+        elif intra_annual_slices is None:
+            provided_tsws = intra_annual_slices
+        else:
+            raise InvalidTemporalSubWindowError(intra_annual_slices,
+                                                ['months', 'seasons'])
+
+        if provided_tsws != pytesmo_results_tsws:
+            print(
+                f'The temporal sub-windows provided ({provided_tsws}) do not match the ones present in the provided netCDF file ({pytesmo_results_tsws}).'
+            )
+            # return None
+            # raise ValueError(f'The temporal sub-windows provided ({provided_tsws}) do not match the ones present in the provided netCDF file ({pytesmo_results_tsws}).')
+            raise TemporalSubWindowMismatchError(provided_tsws,
+                                                 pytesmo_results_tsws)
 
         self.intra_annual_slices: Union[
             None, TemporalSubWindowsCreator] = intra_annual_slices
@@ -46,15 +89,6 @@ class Pytesmo2Qa4smResultsTranscriber:
         self.temporal_sub_windows_checker_called: bool = False
         self.only_default_case: bool = True
 
-        self.pytesmo_ncfile = f'{pytesmo_results}'
-        if not os.path.isfile(pytesmo_results):
-            print(
-                f'FileNotFoundError: \n\nFile {pytesmo_results} not found. Please provide a valid path to a pytesmo results netCDF file.'
-            )
-            self.exists = False
-            return None
-        else:
-            self.exists = True
         with xr.open_dataset(pytesmo_results) as pr:
             self.pytesmo_results: xr.Dataset = pr
 
@@ -87,9 +121,7 @@ class Pytesmo2Qa4smResultsTranscriber:
             self.intra_annual_slices = self.intra_annual_slices.names
             return False, self.intra_annual_slices
         else:
-            raise TypeError(
-                'intra_annual_slices must be None or an instance of `TemporalSubWindowsCreator`'
-            )
+            raise InvalidTemporalSubWindowError(self.intra_annual_slices)
 
     @property
     def non_metrics_list(self) -> List[str]:
@@ -111,10 +143,10 @@ class Pytesmo2Qa4smResultsTranscriber:
             if non_metric in self.pytesmo_results:
                 non_metrics_lst.append(non_metric)
             # else:
-                # print(
-                #     f'Non-metric \'{non_metric}\' not contained in pytesmo results. Skipping...'
-                # )
-                # continue
+            # print(
+            #     f'Non-metric \'{non_metric}\' not contained in pytesmo results. Skipping...'
+            # )
+            # continue
         return non_metrics_lst
 
     def is_valid_metric_name(self, metric_name):
@@ -149,15 +181,14 @@ class Pytesmo2Qa4smResultsTranscriber:
 
         valid_prefixes = [
             "".join(
-                template.format(tsw=tsw, metric=metric, number=number, dataset=dataset)
+                template.format(
+                    tsw=tsw, metric=metric, number=number, dataset=dataset)
                 for template in INTRA_ANNUAL_TCOL_METRIC_TEMPLATE)
-            for tsw in self.intra_annual_slices
-            for metric in TC_METRICS
-            for number in range(MAX_NUM_DS_PER_VAL_RUN)
-            for dataset in DATASETS
+            for tsw in self.intra_annual_slices for metric in TC_METRICS
+            for number in range(MAX_NUM_DS_PER_VAL_RUN) for dataset in DATASETS
         ]
-        return any(tcol_metric_name.startswith(prefix) for prefix in valid_prefixes)
-
+        return any(
+            tcol_metric_name.startswith(prefix) for prefix in valid_prefixes)
 
     @property
     def metrics_list(self) -> List[str]:
@@ -176,7 +207,8 @@ class Pytesmo2Qa4smResultsTranscriber:
 
         _metrics = [
             metric for metric in self.pytesmo_results
-            if self.is_valid_metric_name(metric) or self.is_valid_tcol_metric_name(metric)
+            if self.is_valid_metric_name(metric)
+            or self.is_valid_tcol_metric_name(metric)
         ]
 
         if len(_metrics) != 0:  # intra-annual case
@@ -201,11 +233,12 @@ class Pytesmo2Qa4smResultsTranscriber:
             to plain 'n_obs'.
         """
 
-        _n_obs_vars = sorted([var for var in self.transcribed_dataset
-                    if 'n_obs' in var])
+        _n_obs_vars = sorted(
+            [var for var in self.transcribed_dataset if 'n_obs' in var])
 
         if _n_obs_vars[0] != 'n_obs':
-            self.transcribed_dataset = self.transcribed_dataset.drop_vars(_n_obs_vars[1:])
+            self.transcribed_dataset = self.transcribed_dataset.drop_vars(
+                _n_obs_vars[1:])
             self.transcribed_dataset = self.transcribed_dataset.rename(
                 {_n_obs_vars[0]: 'n_obs'})
 
@@ -325,8 +358,8 @@ class Pytesmo2Qa4smResultsTranscriber:
                 axis="T",
                 description="temporal sub-window name for the dataset",
                 temporal_sub_window_type="No temporal sub-windows used"
-                if self.only_default_case is True else
-                self._temporal_sub_windows.metadata['Temporal sub-window type'],
+                if self.only_default_case is True else self.
+                _temporal_sub_windows.metadata['Temporal sub-window type'],
                 overlap="No temporal sub-windows used"
                 if self.only_default_case is True else
                 self._temporal_sub_windows.metadata['Overlap'],
@@ -424,12 +457,14 @@ class Pytesmo2Qa4smResultsTranscriber:
 
         """
         if self.keep_pytesmo_ncfile:
-            os.rename(self.pytesmo_ncfile, self.pytesmo_ncfile + '.old')
+            os.rename(self.pytesmo_ncfile,
+                      self.pytesmo_ncfile + OLD_NCFILE_SUFFIX)
         else:
             os.remove(self.pytesmo_ncfile)
-        self.transcribed_dataset.to_netcdf(path = path,
-                                           mode = mode,
-                                           )
+        self.transcribed_dataset.to_netcdf(
+            path=path,
+            mode=mode,
+        )
 
         return path
 
@@ -489,22 +524,23 @@ class Pytesmo2Qa4smResultsTranscriber:
                     os.remove(path)
                     os.rename(re_name, path)
 
+                return True
+
             except Exception as e:
                 print(
                     f'\n\nRe-compression failed. {e}\nContinue without re-compression.\n\n'
                 )
-                os.remove(re_name) if os.path.exists(re_name) else None
+                return False
 
         else:
-            print(
+            raise NotImplementedError(
                 f'\n\nRe-compression failed. Compression has to be {IMPLEMENTED_COMPRESSIONS} and compression levels other than {ALLOWED_COMPRESSION_LEVELS} are not supported. Continue without re-compression.\n\n'
             )
 
-
     @staticmethod
-    def get_tsws_from_ncfile(ncfile: str) -> Union[List[str], None]:
+    def get_tsws_from_qa4sm_ncfile(ncfile: str) -> Union[List[str], None]:
         """
-        Get the temporal sub-windows from a NetCDF file.
+        Get the temporal sub-windows from a proper QA4SM NetCDF file.
 
         Parameters
         ----------
@@ -522,3 +558,129 @@ class Pytesmo2Qa4smResultsTranscriber:
                 return list(ds[TEMPORAL_SUB_WINDOW_NC_COORD_NAME].values)
             except KeyError:
                 return None
+
+    @staticmethod
+    def get_tsws_from_pytesmo_ncfile(ncfile: str) -> Union[List[str], None]:
+        """
+        Get the temporal sub-windows from a pytesmo NetCDF file.
+
+        **ATTENTION**: Only retrieves the temporal sub-windows if they are explicitly stated in the data variable names \
+            present in the file. An implicit presence of the bulk case in pytesmo files is not detected.
+
+        Parameters
+        ----------
+        ncfile : str
+            The path to the NetCDF file.
+
+        Returns
+        -------
+        List[str]
+            The temporal sub-windows.
+        """
+
+        with xr.open_dataset(ncfile) as ds:
+            try:
+                out = list({
+                    data_var.split(TEMPORAL_SUB_WINDOW_SEPARATOR)[0]
+                    for data_var in list(ds.data_vars)
+                    if TEMPORAL_SUB_WINDOW_SEPARATOR in data_var
+                    and any([metric in data_var for metric in METRICS])
+                })
+                if not out:
+                    return None
+                return out
+
+            except KeyError:
+                return None
+
+    @staticmethod
+    def get_tsws_from_ncfile(ncfile: str) -> Union[List[str], None]:
+        """
+        Get the temporal sub-windows from a QA4SM or pytesmo NetCDF file.
+
+        **ATTENTION**: Only retrieves the temporal sub-windows if they are explicitly stated in the data variable names \
+            present in the file. An implicit presence of the bulk case is not detected.
+
+        Parameters
+        ----------
+        ncfile : str
+            The path to the NetCDF file.
+
+        Returns
+        -------
+        Union[List[str], None]
+            A list of temporal sub-windows or None if the file does not contain any.
+        """
+
+        def sort_tsws(tsw_list: List[str]) -> List[str]:
+            '''Sort the temporal sub-windows in the order of the calendar months, the seasons, \
+                and the custom temporal sub-windows. Only sorts if temporal sub-windows of only one \
+                    kind are present;
+
+                Parameters
+                ----------
+                tsw_list : List[str]
+                    The list of temporal sub-windows.
+
+                Returns
+                -------
+                List[str]
+                    The sorted list of temporal sub-windows.
+            '''
+            if not tsw_list:
+                return tsw_list
+
+            bulk_present = DEFAULT_TSW in tsw_list
+            if bulk_present:
+                tsw_list.remove(DEFAULT_TSW)
+
+            month_order = {
+                month: index
+                for index, month in enumerate(calendar.month_abbr) if month
+            }
+            seasons_1_order = {f'S{i}': i - 1 for i in range(1, 5)}
+            seasons_2_order = {
+                season: index
+                for index, season in enumerate(['DJF', 'MAM', 'JJA', 'SON'])
+            }
+
+            def get_custom_tsws(tsw_list):
+                customs = [
+                    tsw for tsw in tsw_list
+                    if tsw not in month_order and tsw not in seasons_1_order
+                    and tsw not in seasons_2_order
+                ]
+                return customs, list(set(tsw_list) - set(customs))
+
+            custom_tsws, tsw_list = get_custom_tsws(tsw_list)
+            lens = {len(tsw) for tsw in tsw_list}
+
+            if lens == {2} and all(
+                    tsw.startswith('S')
+                    for tsw in tsw_list):  # seasons like S1, S2, S3, S4
+                _presorted = sorted(tsw_list, key=seasons_1_order.get)
+
+            elif lens == {3} and all(
+                    tsw in seasons_2_order
+                    for tsw in tsw_list):  # seasons like DJF, MAM, JJA, SON
+                _presorted = sorted(tsw_list, key=seasons_2_order.get)
+
+            elif lens == {3} and all(tsw.isalpha()
+                                     for tsw in tsw_list) and all(
+                                         tsw in month_order for tsw in tsw_list
+                                     ):  # months like Jan, Feb, Mar, Apr, ...
+                _presorted = sorted(tsw_list, key=month_order.get)
+
+            else:
+                _presorted = tsw_list
+
+            return ([DEFAULT_TSW]
+                    if bulk_present else []) + _presorted + custom_tsws
+
+        with xr.open_dataset(ncfile) as ds:
+            tsws = Pytesmo2Qa4smResultsTranscriber.get_tsws_from_qa4sm_ncfile(
+                ncfile)
+            if not tsws:
+                tsws = Pytesmo2Qa4smResultsTranscriber.get_tsws_from_pytesmo_ncfile(
+                    ncfile)
+            return sort_tsws(tsws)
