@@ -650,9 +650,14 @@ class Pytesmo2Qa4smResultsTranscriber:
                     if tsw not in month_order and tsw not in seasons_1_order
                     and tsw not in seasons_2_order
                 ]
-                return customs, list(set(tsw_list) - set(customs))
+                return customs, list(set(tsw_list) - set(customs))          
 
             custom_tsws, tsw_list = get_custom_tsws(tsw_list)
+            
+            if all(tsw.isdigit() for tsw in custom_tsws):
+                custom_tsws = sorted(custom_tsws, key=int)
+
+            
             lens = {len(tsw) for tsw in tsw_list}
 
             if lens == {2} and all(
