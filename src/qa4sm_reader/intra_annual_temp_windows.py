@@ -4,7 +4,7 @@ from pytesmo.validation_framework.metric_calculators_adapters import TsDistribut
 from pytesmo.time_series.grouping import YearlessDatetime
 
 from typing import Optional, List, Tuple, Dict, Union
-import os
+from pathlib import Path
 from datetime import datetime
 import json
 from abc import ABC, abstractmethod
@@ -49,7 +49,7 @@ class TemporalSubWindowsDefault(ABC):
         return f'{self.__class__.__name__}(custom_file={self.custom_file})'
 
     def __str__(self) -> str:
-        return f'{self.__class__.__name__}({os.path.basename(self.custom_file)})'
+        return f'{self.__class__.__name__}({Path(self.custom_file).name})'
 
     def _load_json_data(self, json_path: str) -> dict:
         '''Reads and loads the JSON file into a dictionary.
@@ -373,7 +373,7 @@ class TemporalSubWindowsCreator(TemporalSubWindowsDefault):
         if not self.custom_file:
             self.temporal_sub_windows_dict = TEMPORAL_SUB_WINDOWS
             return list(self.temporal_sub_windows_dict.keys())
-        elif os.path.isfile(self.custom_file):
+        elif Path(self.custom_file).is_file():
             self.temporal_sub_windows_dict = self._load_json_data(
                 self.custom_file)
             return list(self.temporal_sub_windows_dict.keys())

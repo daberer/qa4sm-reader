@@ -1,9 +1,13 @@
 import xarray as xr
 import numpy as np
-from typing import Any, List, Dict, Optional, Union, Tuple
+from typing import List, Dict, Optional, Union, Tuple
 import os
 import calendar
-import warnings
+import time
+import shutil
+import tempfile
+import sys
+from pathlib import Path
 
 from qa4sm_reader.intra_annual_temp_windows import TemporalSubWindowsCreator, InvalidTemporalSubWindowError
 from qa4sm_reader.globals import    METRICS, TC_METRICS, NON_METRICS, METADATA_TEMPLATE, \
@@ -20,6 +24,7 @@ class TemporalSubWindowMismatchError(Exception):
         super().__init__(
             f'The temporal sub-windows provided ({provided}) do not match the ones present in the provided netCDF file ({expected}).'
         )
+
 
 
 class Pytesmo2Qa4smResultsTranscriber:
@@ -46,8 +51,28 @@ class Pytesmo2Qa4smResultsTranscriber:
                                             TemporalSubWindowsCreator] = None,
                  keep_pytesmo_ncfile: Optional[bool] = False):
 
+        self.original_pytesmo_ncfile = str(pytesmo_results)
+
+        # windows workaround
+        # windows keeps a file lock on the original file, which prevents it from being renamed or deleted
+        # to circumvent this, the file is copied to a temporary directory and the copy is used instead
+
+        if sys.platform.startswith("win"):
+            if not isinstance(pytesmo_results, Path):
+                pytesmo_results = Path(pytesmo_results)
+
+            _tmp_dir = Path(tempfile.mkdtemp())
+            tmp_dir = _tmp_dir / pytesmo_results.parent.name
+
+            if not tmp_dir.exists():
+                tmp_dir.mkdir()
+
+            new_pytesmo_results = tmp_dir / pytesmo_results.name
+            shutil.copy(pytesmo_results, new_pytesmo_results)
+            pytesmo_results = str(new_pytesmo_results)
+
         self.pytesmo_ncfile = f'{pytesmo_results}'
-        if not os.path.isfile(pytesmo_results):
+        if not Path(pytesmo_results).is_file():
             self.exists = False
             raise FileNotFoundError(
                 f'\n\nFile {pytesmo_results} not found. Please provide a valid path to a pytesmo results netCDF file.'
@@ -60,20 +85,18 @@ class Pytesmo2Qa4smResultsTranscriber:
         pytesmo_results_tsws = Pytesmo2Qa4smResultsTranscriber.get_tsws_from_ncfile(
             pytesmo_results)
         if isinstance(intra_annual_slices, TemporalSubWindowsCreator):
-            provided_tsws = intra_annual_slices.names
+            self.provided_tsws = intra_annual_slices.names
         elif intra_annual_slices is None:
-            provided_tsws = intra_annual_slices
+            self.provided_tsws = intra_annual_slices
         else:
             raise InvalidTemporalSubWindowError(intra_annual_slices,
                                                 ['months', 'seasons'])
 
-        if provided_tsws != pytesmo_results_tsws:
+        if self.provided_tsws != pytesmo_results_tsws:
             print(
-                f'The temporal sub-windows provided ({provided_tsws}) do not match the ones present in the provided netCDF file ({pytesmo_results_tsws}).'
+                f'The temporal sub-windows provided ({self.provided_tsws}) do not match the ones present in the provided netCDF file ({pytesmo_results_tsws}).'
             )
-            # return None
-            # raise ValueError(f'The temporal sub-windows provided ({provided_tsws}) do not match the ones present in the provided netCDF file ({pytesmo_results_tsws}).')
-            raise TemporalSubWindowMismatchError(provided_tsws,
+            raise TemporalSubWindowMismatchError(self.provided_tsws,
                                                  pytesmo_results_tsws)
 
         self.intra_annual_slices: Union[
@@ -98,7 +121,7 @@ class Pytesmo2Qa4smResultsTranscriber:
         return f'{self.__class__.__name__}(pytesmo_results="{self.pytesmo_ncfile}", intra_annual_slices={self.intra_annual_slices.__repr__()})'
 
     def __str__(self) -> str:
-        return f'{self.__class__.__name__}("{os.path.basename(self.pytesmo_ncfile)}", {self.intra_annual_slices})'
+        return f'{self.__class__.__name__}("{Path(self.pytesmo_ncfile).name}", {self.intra_annual_slices})'
 
     def temporal_sub_windows_checker(
             self) -> Tuple[bool, Union[List[str], None]]:
@@ -118,8 +141,7 @@ class Pytesmo2Qa4smResultsTranscriber:
         if self.intra_annual_slices is None:
             return True, [DEFAULT_TSW]
         elif isinstance(self.intra_annual_slices, TemporalSubWindowsCreator):
-            self.intra_annual_slices = self.intra_annual_slices.names
-            return False, self.intra_annual_slices
+            return False, self.provided_tsws
         else:
             raise InvalidTemporalSubWindowError(self.intra_annual_slices)
 
@@ -159,12 +181,11 @@ class Pytesmo2Qa4smResultsTranscriber:
         Returns:
         bool: True if the metric name is valid, False otherwise.
         """
-
         valid_prefixes = [
             "".join(
                 template.format(tsw=tsw, metric=metric)
                 for template in INTRA_ANNUAL_METRIC_TEMPLATE)
-            for tsw in self.intra_annual_slices for metric in METRICS
+            for tsw in self.provided_tsws for metric in METRICS
         ]
         return any(metric_name.startswith(prefix) for prefix in valid_prefixes)
 
@@ -178,13 +199,12 @@ class Pytesmo2Qa4smResultsTranscriber:
         Returns:
         bool: True if the metric name is valid, False otherwise.
         """
-
         valid_prefixes = [
             "".join(
                 template.format(
                     tsw=tsw, metric=metric, number=number, dataset=dataset)
                 for template in INTRA_ANNUAL_TCOL_METRIC_TEMPLATE)
-            for tsw in self.intra_annual_slices for metric in TC_METRICS
+            for tsw in self.provided_tsws for metric in TC_METRICS
             for number in range(MAX_NUM_DS_PER_VAL_RUN) for dataset in DATASETS
         ]
         return any(
@@ -303,11 +323,11 @@ class Pytesmo2Qa4smResultsTranscriber:
         xr.Dataset
             The transcribed dataset.
         """
-        self.only_default_case, self.intra_annual_slices = self.temporal_sub_windows_checker(
+        self.only_default_case, self.provided_tsws = self.temporal_sub_windows_checker(
         )
 
         self.pytesmo_results[
-            TEMPORAL_SUB_WINDOW_NC_COORD_NAME] = self.intra_annual_slices
+            TEMPORAL_SUB_WINDOW_NC_COORD_NAME] = self.provided_tsws
 
         metric_vars = self.metrics_list
         self.transcribed_dataset = xr.Dataset()
@@ -324,7 +344,7 @@ class Pytesmo2Qa4smResultsTranscriber:
                     var_name].expand_dims(
                         {
                             TEMPORAL_SUB_WINDOW_NC_COORD_NAME:
-                            self.intra_annual_slices
+                            self.provided_tsws
                         },
                         axis=-1)
             else:
@@ -354,7 +374,7 @@ class Pytesmo2Qa4smResultsTranscriber:
                 long_name="temporal sub-window",
                 standard_name="temporal sub-window",
                 units="1",
-                valid_range=[0, len(self.intra_annual_slices)],
+                valid_range=[0, len(self.provided_tsws)],
                 axis="T",
                 description="temporal sub-window name for the dataset",
                 temporal_sub_window_type="No temporal sub-windows used"
@@ -378,6 +398,8 @@ class Pytesmo2Qa4smResultsTranscriber:
                     {_dict['attr_name']: _dict['attr_value']})
         except AttributeError:
             pass
+
+        self.pytesmo_results.close()
 
         return self.transcribed_dataset
 
@@ -410,13 +432,13 @@ class Pytesmo2Qa4smResultsTranscriber:
 
         fname = "_with_".join(ds_names)
         ext = "nc"
-        if len(os.path.join(root, ".".join([fname, ext]))) > 255:
+        if len(str(Path(root) / f"{fname}.{ext}")) > 255:
             ds_names = [str(ds[0]) for ds in key]
             fname = "_with_".join(ds_names)
 
-            if len(os.path.join(root, ".".join([fname, ext]))) > 255:
+            if len(str(Path(root) / f"{fname}.{ext}")) > 255:
                 fname = "validation"
-        self.outname = os.path.join(root, ".".join([fname, ext]))
+        self.outname = Path(root) / f"{fname}.{ext}"
         return self.outname
 
     def write_to_netcdf(self,
@@ -424,10 +446,7 @@ class Pytesmo2Qa4smResultsTranscriber:
                         mode: Optional[str] = 'w',
                         format: Optional[str] = 'NETCDF4',
                         engine: Optional[str] = 'netcdf4',
-                        encoding: Optional[dict] = {
-                            "zlib": True,
-                            "complevel": 5
-                        },
+                        encoding: Optional[dict] = None,
                         compute: Optional[bool] = True,
                         **kwargs) -> str:
         """
@@ -454,16 +473,73 @@ class Pytesmo2Qa4smResultsTranscriber:
         -------
         str
             The path to the NetCDF file.
-
         """
-        if self.keep_pytesmo_ncfile:
-            os.rename(self.pytesmo_ncfile,
-                      self.pytesmo_ncfile + OLD_NCFILE_SUFFIX)
-        else:
-            os.remove(self.pytesmo_ncfile)
+        # Default encoding applied to all variables
+        if encoding is None:
+            encoding = {}
+            for var in self.transcribed_dataset.variables:
+                if not np.issubdtype(self.transcribed_dataset[var].dtype,
+                                     np.object_):
+                    encoding[str(var)] = {'zlib': True, 'complevel': 1}
+                else:
+                    encoding[str(var)] = {'zlib': False}
+
+        try:
+            self.pytesmo_results.close()
+            Path(self.original_pytesmo_ncfile).rename(
+                self.original_pytesmo_ncfile + OLD_NCFILE_SUFFIX)
+        except PermissionError as e:
+            shutil.copy(self.original_pytesmo_ncfile,
+                        self.original_pytesmo_ncfile + OLD_NCFILE_SUFFIX)
+
+        if not self.keep_pytesmo_ncfile:
+            retry_count = 5
+            for i in range(retry_count):
+                try:
+                    self.pytesmo_results.close()
+                    Path(self.original_pytesmo_ncfile +
+                         OLD_NCFILE_SUFFIX).unlink()
+                    break
+                except PermissionError:
+                    if i < retry_count - 1:
+                        time.sleep(1)
+
+        for var in self.transcribed_dataset.data_vars:
+            # Check if the data type is Unicode (string type)
+            if self.transcribed_dataset[var].dtype.kind == 'U':
+                # Find the maximum string length in this variable
+                max_len = self.transcribed_dataset[var].str.len().max().item()
+
+                # Create a character array of shape (n, max_len), where n is the number of strings
+                char_array = np.array([
+                    list(s.ljust(max_len))
+                    for s in self.transcribed_dataset[var].values
+                ],
+                                      dtype=f'S1')
+
+                # Create a new DataArray for the character array with an extra character dimension
+                self.transcribed_dataset[var] = xr.DataArray(
+                    char_array,
+                    dims=(self.transcribed_dataset[var].dims[0],
+                          f"{var}_char"),
+                    coords={
+                        self.transcribed_dataset[var].dims[0]:
+                        self.transcribed_dataset[var].coords[
+                            self.transcribed_dataset[var].dims[0]]
+                    },
+                    attrs=self.transcribed_dataset[var].
+                    attrs  # Preserve original attributes if needed
+                )
+
+        # Ensure the dataset is closed
+        if isinstance(self.transcribed_dataset, xr.Dataset):
+            self.transcribed_dataset.close()
+
+        # Write the transcribed dataset to a new NetCDF file
         self.transcribed_dataset.to_netcdf(
             path=path,
             mode=mode,
+            encoding=encoding,
         )
 
         return path
@@ -504,8 +580,9 @@ class Pytesmo2Qa4smResultsTranscriber:
 
             try:
                 with xr.open_dataset(path) as ds:
-                    parent_dir, file = os.path.split(path)
-                    re_name = os.path.join(parent_dir, f're_{file}')
+                    parent_dir = Path(path).parent
+                    file = Path(path).name
+                    re_name = parent_dir / f're_{file}'
                     ds.to_netcdf(re_name,
                                  mode='w',
                                  format='NETCDF4',
@@ -519,10 +596,10 @@ class Pytesmo2Qa4smResultsTranscriber:
                 re_name_size = os.path.getsize(re_name)
 
                 if fpath_size < re_name_size:
-                    os.remove(re_name)
+                    Path(re_name).unlink()
                 else:
-                    os.remove(path)
-                    os.rename(re_name, path)
+                    Path(path).unlink()
+                    Path(re_name).rename(path)
 
                 return True
 
@@ -682,10 +759,21 @@ class Pytesmo2Qa4smResultsTranscriber:
             return ([DEFAULT_TSW]
                     if bulk_present else []) + _presorted + custom_tsws
 
-        with xr.open_dataset(ncfile) as ds:
-            tsws = Pytesmo2Qa4smResultsTranscriber.get_tsws_from_qa4sm_ncfile(
+        tsws = Pytesmo2Qa4smResultsTranscriber.get_tsws_from_qa4sm_ncfile(
+            ncfile)
+        if not tsws:
+            tsws = Pytesmo2Qa4smResultsTranscriber.get_tsws_from_pytesmo_ncfile(
                 ncfile)
-            if not tsws:
-                tsws = Pytesmo2Qa4smResultsTranscriber.get_tsws_from_pytesmo_ncfile(
-                    ncfile)
-            return sort_tsws(tsws)
+        return sort_tsws(tsws)
+
+
+if __name__ == '__main__':
+    pth = '/tmp/qa4sm/basic/0-ISMN.soil moisture_with_1-C3S.sm.nc'
+
+    transcriber = Pytesmo2Qa4smResultsTranscriber(pytesmo_results=pth,
+                                                  intra_annual_slices=None,
+                                                  keep_pytesmo_ncfile=True)
+    ds = transcriber.get_transcribed_dataset()
+    print('writing to netcdf')
+    transcriber.write_to_netcdf(
+        path='/tmp/qa4sm/basic/0-ISMN.soil moisture_with_1-C3S.sm.nc.new')

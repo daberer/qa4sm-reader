@@ -36,7 +36,6 @@ jobs:
           auto-update-conda: true
           python-version: ${{ matrix.python-version }}
           environment-file: ${{ matrix.ymlfile }}
-          mamba-version: "*"
           activate-environment: qa4sm_reader # todo: must match with name in environment.yml
           auto-activate-base: false
       - name: Print environment infos

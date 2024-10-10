@@ -1,9 +1,7 @@
 import os
-from tkinter import N
-import numpy as np
+from pathlib import Path
 import pytest
 import json
-from unittest.mock import patch, mock_open
 from copy import deepcopy
 from datetime import datetime
 from pytesmo.validation_framework.metric_calculators_adapters import TsDistributor
@@ -48,12 +46,11 @@ def seasonal_sub_windows_negative_overlap():
 @pytest.fixture
 def temporal_sub_windows_custom():
     # load custom temporal sub-windows from json file
-    return TemporalSubWindowsCreator(temporal_sub_window_type='custom',
-                                     overlap=0,
-                                     custom_file=os.path.join(
-                                         os.path.dirname(__file__), '..',
-                                         'tests', 'test_data', 'intra_annual',
-                                         'custom_intra_annual_windows.json'))
+    return TemporalSubWindowsCreator(
+        temporal_sub_window_type='custom',
+        overlap=0,
+        custom_file=Path(__file__).resolve().parent.parent / 'tests' /
+        'test_data' / 'intra_annual' / 'custom_intra_annual_windows.json')
 
 
 @pytest.fixture
@@ -285,9 +282,8 @@ def test_load_custom_temporal_sub_windows(temporal_sub_windows_custom):
     # 'temporal_sub_window_type' corresponds to the defined temporal sub-windows in the provided json file
     # the file may contain any number of temporal sub-windows, but one is selected via a keyword argument 'temporal_sub_window_type' for each TemporalSubWindowsCreator instance
 
-    assert temporal_sub_windows_custom.custom_file == os.path.join(
-        os.path.dirname(__file__), '..', 'tests', 'test_data', 'intra_annual',
-        'custom_intra_annual_windows.json')
+    assert temporal_sub_windows_custom.custom_file == Path(__file__).resolve(
+    ).parent.parent / 'tests' / 'test_data' / 'intra_annual' / 'custom_intra_annual_windows.json'
 
     assert temporal_sub_windows_custom.temporal_sub_window_type == 'custom'
 
