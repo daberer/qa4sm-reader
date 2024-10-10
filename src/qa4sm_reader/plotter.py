@@ -1752,13 +1752,11 @@ class QA4SMCompPlotter:
             #TODO: After cleaning the dataframe of nan values every year has the exact same amount of datapoints, check this and remove number from labels if ok
 
             min_non_nan_columns = int(column_threshold * len(df))
-    
             df_cleaned = df.dropna(axis=1, thresh=min_non_nan_columns)
             
             min_non_nan_rows = int(row_threshold_fraction * len(df_cleaned.columns))
-            
             df_cleaned = df_cleaned.dropna(thresh=min_non_nan_rows)
-
+            
             df_cleaned.dropna(inplace=True)
 
             return df_cleaned
@@ -1777,7 +1775,6 @@ class QA4SMCompPlotter:
 
             anchor_number = len(first_df.columns)
             anchor_list = np.arange(anchor_number).astype(float)
-
 
         if anchor_list is None:
             anchor_list = self.cbp.anchor_list
