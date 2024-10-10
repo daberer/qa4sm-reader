@@ -628,7 +628,7 @@ def test_plotting(seasonal_qa4sm_file, monthly_qa4sm_file, stability_qa4sm_file,
         out_type=['png', 'svg'],
     )
 
-    metrics_not_plotted = [*globals.metric_groups[0], *globals.metric_groups[3], *globals._metadata_exclude]
+    metrics_not_plotted = [*globals.metric_groups['common'], *globals.metric_groups['triple'], *globals._metadata_exclude]
 
     tsw_dirs_expected = Pytesmo2Qa4smResultsTranscriber.get_tsws_from_ncfile(
         tmp_seasonal_file)
