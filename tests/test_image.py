@@ -75,7 +75,7 @@ def test_load_vars(img):
 
 def test_iter_vars(img):
     for Var in img._iter_vars(type="metric"):
-        assert Var.g in [0, 2, 3]
+        assert Var.g in ['common', 'pairwise', 'triple']
     for Var in img._iter_vars(type="metric", filter_parms={'metric': 'R'}):
         assert Var.varname in [
             'R_between_0-ERA5_LAND_and_2-SMOS_IC',
@@ -84,8 +84,8 @@ def test_iter_vars(img):
 
 
 def test_iter_metrics(img):
-    for Metr in img._iter_metrics(**{'g': 2}):
-        assert Metr.name in globals.metric_groups[2]
+    for Metr in img._iter_metrics(**{'g': 'pairwise'}):
+        assert Metr.name in globals.metric_groups['pairwise']
 
 
 def test_group_vars(img):
@@ -109,8 +109,8 @@ def test_group_metrics(img):
 
 
 def test_load_metrics(img):
-    assert len(img.metrics.keys()) == len(globals.metric_groups[0]) + len(
-        globals.metric_groups[2]) - 2
+    assert len(img.metrics.keys()) == len(globals.metric_groups['common']) + len(
+        globals.metric_groups['pairwise']) - 2
 
 
 def test_ds2df(img):
@@ -135,9 +135,9 @@ def test_metric_df(img):
 
 def test_metrics_in_file(img):
     """Test that all metrics are initialized correctly"""
-    assert list(img.common.keys()) == globals.metric_groups[0]
+    assert list(img.common.keys()) == globals.metric_groups['common']
     for m in img.double.keys():  # tau is not in the results
-        assert m in globals.metric_groups[2]
+        assert m in globals.metric_groups['pairwise']
     assert list(img.triple.keys()) == []  # this is not the TC test case
 
     # with merged return value
@@ -153,7 +153,7 @@ def test_vars_in_file(img):
         vars.append(Var.varname)
     vars_should = ['n_obs']
     # since the valination is non-TC
-    for metric in globals.metric_groups[2]:
+    for metric in globals.metric_groups['pairwise']:
         vars_should.append(
             '{}_between_0-ERA5_LAND_and_1-C3S_combined'.format(metric))
         vars_should.append(
@@ -173,13 +173,13 @@ def test_find_groups(img):
     """Test that all metrics for a specific group can be collected"""
     common_group = []
     for name, Metric in img.common.items():
-        assert Metric.name in globals.metric_groups[0]
+        assert Metric.name in globals.metric_groups['common']
         assert len(Metric.variables) == 1
         common_group.append(name)
     double_group = []
     for name, Metric in img.double.items():
 
-        assert Metric.name in globals.metric_groups[2]
+        assert Metric.name in globals.metric_groups['pairwise']
         if name in [
                 'p_R', 'p_rho', 'RMSD', 'mse', 'mse_corr', 'mse_bias',
                 'mse_var', 'RSS', 'status'
@@ -250,16 +250,16 @@ def test_stats_df(img):
     for name, Metric in img.metrics.items():
         stats = img._metric_stats(name)
         if not stats:  # find metrics without values
-            if Metric.g == 1:
+            if Metric.g == 1: # don't know what was meant here, g was defined as 0,2 or 3
                 empty_metrics += 1
-            elif Metric.g == 2:  # stats table has an entry for metric, for sat dataset (in common and triple metrics)
+            elif Metric.g == 'pairwise':  # stats table has an entry for metric, for sat dataset (in common and triple metrics)
                 empty_metrics += 2
 
     tot_stats = len(
         img.common.keys()) + 2 * len(img.double.keys()) - empty_metrics
     assert tot_stats == 27
-    glob_stats = len(globals.metric_groups[0]) + 2 * len(
-        globals.metric_groups[2]) - empty_metrics
+    glob_stats = len(globals.metric_groups['common']) + 2 * len(
+        globals.metric_groups['pairwise']) - empty_metrics
     assert glob_stats == 31
 
     # We drop the corr. significance statistics

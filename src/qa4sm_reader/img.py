@@ -351,11 +351,11 @@ class QA4SMImg(object):
         # fill dictionaries
         for metric in metrics:
             Metric = self.metrics[metric]
-            if Metric.g == 0:
+            if Metric.g == 'common':
                 common[metric] = Metric
-            elif Metric.g == 2:
+            elif Metric.g == 'pairwise' or Metric.g == 'pairwise_stability':
                 double[metric] = Metric
-            elif Metric.g == 3:
+            elif Metric.g == 'triple':
                 triple[metric] = Metric
 
         return common, double, triple
@@ -490,17 +490,17 @@ class QA4SMImg(object):
 
             # find the statistics for the metric variable
             var_stats = [mean, values.median(), iqr]
-            if Var.g == 0:
+            if Var.g == 'common':
                 var_stats.append('All datasets')
                 var_stats.extend([globals._metric_name[metric], Var.g])
 
             else:
                 i, ds_name = Var.metric_ds
-                if Var.g == 2:
+                if Var.g == 'pairwise' or Var.g == 'pairwise_stability':
                     var_stats.append('{}-{} ({})'.format(
                         i, ds_name['short_name'], ds_name['pretty_version']))
 
-                elif Var.g == 3:
+                elif Var.g == 'triple':
                     o, other_ds = Var.other_ds
                     var_stats.append(
                         '{}-{} ({}); other ref: {}-{} ({})'.format(

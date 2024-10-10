@@ -87,10 +87,16 @@ def plot_all(filepath: str,
 
     # initialise image and plotter
     fnames_bplot, fnames_mapplot, fnames_csv = [], [], []
+
+    comparison_periods = None
     if temporal_sub_windows is None:
         periods = Pytesmo2Qa4smResultsTranscriber.get_tsws_from_ncfile(filepath)
     else:
         periods = np.array(temporal_sub_windows)
+    # Filter out all items that are purely digits 
+    # Needs to be here because when qa4sm-validaion is run the temporal_sub_windows is not None
+    comparison_periods = periods
+    periods = [period for period in periods if not period.isdigit()]
 
     for period in periods:
         print(f'period: {period}')
@@ -147,8 +153,11 @@ def plot_all(filepath: str,
     fnames_cbplot = []
     if isinstance(out_type, str):
         out_type = [out_type]
-    metrics_not_to_plot = list(set(chain(globals._metadata_exclude, globals.metric_groups[3], ['n_obs']))) # metadata, tcol metrics, n_obs
-    if globals.DEFAULT_TSW in periods and len(periods) > 1:
+    metrics_not_to_plot = list(set(chain(globals._metadata_exclude, globals.metric_groups['triple'], ['n_obs']))) # metadata, tcol metrics, n_obs
+    if globals.DEFAULT_TSW in comparison_periods and len(comparison_periods) > 1:
+
+        #check if stability metrics where calculated
+        stability = all(item.isdigit() for item in comparison_periods if item != 'bulk')
         cbp = QA4SMCompPlotter(filepath)
         if not os.path.isdir(os.path.join(out_dir, 'comparison_boxplots')):
             os.makedirs(os.path.join(out_dir, 'comparison_boxplots'))
@@ -162,6 +171,7 @@ def plot_all(filepath: str,
                 _fig = cbp.plot_cbp(
                     chosen_metric=available_metric,
                     out_name=spth,
+                    stability=stability
                 )
                 plt.close(_fig)
                 fnames_cbplot.extend(spth)

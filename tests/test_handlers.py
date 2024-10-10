@@ -214,7 +214,7 @@ def test_parse_varname(tc_metrics):
     for var in [tc_metrics["beta"], tc_metrics["r"], tc_metrics["n_obs"]]:
         info = var._parse_varname()
         assert type(info[0]) == str
-        assert type(info[1]) == int
+        assert type(info[1]) == str
         assert type(info[2]) == dict
 
 

@@ -133,6 +133,16 @@ _cclasses = {
         'YlGn'],  # sequential: increasing value good (n_obs, STDerr)
     'qua_neutr':
     get_status_colors(),  # qualitative category with 2 forced colors
+    # Added colormaps for ts_slope metrics
+    'div_ts_BIAS': matplotlib.colormaps[
+        'RdBu_r'
+    ],  # diverging colormap for ts_slope_BIAS
+    'div_ts_R': matplotlib.colormaps[
+        'PiYG'
+    ],  # diverging colormap for ts_slope_R
+    'div_ts_urmsd': matplotlib.colormaps[
+        'PuOr'
+    ]  # diverging colormap for ts_slope_urmsd
 }
 
 _colormaps = {  # from /qa4sm/validator/validation/graphics.py
@@ -155,6 +165,9 @@ _colormaps = {  # from /qa4sm/validator/validation/graphics.py
     'err_std': _cclasses['seq_worse'],
     'beta': _cclasses['div_neutr'],
     'status': _cclasses['qua_neutr'],
+    'ts_slope_R': _cclasses['div_ts_R'],
+    'ts_slope_urmsd': _cclasses['div_ts_urmsd'],
+    'ts_slope_BIAS': _cclasses['div_ts_BIAS'],
 }
 
 # Colorbars for difference plots
@@ -180,34 +193,42 @@ _diff_colormaps = {  # from /qa4sm/validator/validation/graphics.py
 
 # METRICS AND VARIABLES DEFINITIONS
 # =====================================================
-# 0=common metrics, 2=paired metrics (2 datasets), 3=triple metrics (TC, 3 datasets)
+# common metrics, pairwise metrics (2 datasets), triple metrics (TC, 3 datasets), pairwise stability metrics(2 datasets)
 metric_groups = {
-    0: ['n_obs'],
-    2: [
+    'common': ['n_obs'],
+    'pairwise': [
         'R', 'p_R', 'rho', 'p_rho', 'RMSD', 'BIAS', 'urmsd', 'mse', 'mse_corr',
-        'mse_bias', 'mse_var', 'RSS', 'tau', 'p_tau', 'status'
+        'mse_bias', 'mse_var', 'RSS', 'tau', 'p_tau', 'status' 
     ],
-    3: ['snr', 'err_std', 'beta', 'status']
+    'triple': ['snr', 'err_std', 'beta', 'status'],
+    'pairwise_stability': ['ts_slope_urmsd', 'ts_slope_R', 'ts_slope_BIAS']
 }
+
+def get_metric_format(group, metric_dict):
+    # metric groups 'pairwise and 'pairwise_stability should be handled the same
+    if group == "pairwise_stability":
+        group = "pairwise"
+    return metric_dict.get(group)
 
 # === variable template ===
 # how the metric is separated from the rest
 var_name_metric_sep = {
-    0: "{metric}",
-    2: "{metric}_between_",
-    3: "{metric}_{mds_id:d}-{mds}_between_"
+    'common': "{metric}",
+    'pairwise': "{metric}_between_",
+    'triple': "{metric}_{mds_id:d}-{mds}_between_"
 }
+
 var_name_CI = {
-    0: "{metric}_ci_{bound}_between_",
-    2: "{metric}_ci_{bound}_between_",
-    3: "{metric}_ci_{bound}_{mds_id:d}-{mds}_between_"
+    'common': "{metric}_ci_{bound}_between_",
+    'pairwise': "{metric}_ci_{bound}_between_",
+    'triple': "{metric}_ci_{bound}_{mds_id:d}-{mds}_between_"
 }
 # how two datasets are separated, ids must be marked as numbers with :d!
 var_name_ds_sep = {
-    0: None,
-    2: "{ref_id:d}-{ref_ds}_and_{sat_id0:d}-{sat_ds0}",
-    3:
-    "{ref_id:d}-{ref_ds}_and_{sat_id0:d}-{sat_ds0}_and_{sat_id1:d}-{sat_ds1}"
+    'common': None,
+    'pairwise': "{ref_id:d}-{ref_ds}_and_{sat_id0:d}-{sat_ds0}",
+    'triple':
+    "{ref_id:d}-{ref_ds}_and_{sat_id0:d}-{sat_ds0}_and_{sat_id1:d}-{sat_ds1}",
 }
 
 # === metadata templates ===
@@ -221,9 +242,9 @@ _val_dc_variable_pretty_name = 'val_dc_variable_pretty_name{:d}'  # attribute co
 
 # format should have (metric, ds, ref, other ds)
 _variable_pretty_name = {
-    0: "{}",
-    2: "{}\nof {}\nwith {} as reference",
-    3: "{} of {} \n against {}, {}"
+    'common': "{}",
+    'pairwise': "{}\nof {}\nwith {} as reference",
+    'triple': "{} of {} \n against {}, {}"
 }
 
 # check if every metric has a colormap
@@ -251,6 +272,9 @@ _metric_value_ranges = {  # from /qa4sm/validator/validation/graphics.py
     'err_std': [None, None],
     'beta': [None, None],
     'status': [-1, len(status)-2],
+    'ts_slope_R': [None, None],
+    'ts_slope_urmsd': [None, None],
+    'ts_slope_BIAS': [None, None],
 }
 # mask values out of range
 _metric_mask_range = {
@@ -282,11 +306,14 @@ _metric_description = {  # from /qa4sm/validator/validation/graphics.py
     'err_std': ' in {}',
     'beta': ' in {}',
     'status': '',
+    'ts_slope_R': '',
+    'ts_slope_urmsd': ' in {}',
+    'ts_slope_BIAS': ' in {}',
 }
 
 
 # units for all datasets
-def get_metric_units(dataset, raise_error=False):
+def get_metric_units(dataset, metric=None, raise_error=False):
     # function to get m.u. with possibility to raise error
     _metric_units = {  # from /qa4sm/validator/validation/graphics.py
         'ISMN': 'm³/m³',
@@ -311,21 +338,23 @@ def get_metric_units(dataset, raise_error=False):
         'SMOS_SBPCA': 'm³/m³',
     }
 
-    try:
-        return _metric_units[dataset]
+    unit = _metric_units.get(dataset)
 
-    except KeyError:
+    if unit is None:
         if raise_error:
-            raise KeyError(
-                f"The dataset {dataset} has not been specified in {__name__}")
-
+            raise KeyError(f"The dataset '{dataset}' has not been specified in {__name__}.")
         else:
             warnings.warn(
-                f"The dataset {dataset} has not been specified in {__name__}. "
-                f"Set 'raise_error' to True to raise an exception for this case."
+                f"The dataset '{dataset}' has not been specified in {__name__}. "
+                "Set 'raise_error' to True to raise an exception for this case.",
+                UserWarning
             )
-
             return "n.a."
+
+    if metric in STABILITY_METRICS:
+        unit += ' per decade'
+
+    return unit
 
 COMMON_METRICS = {
     'R': 'Pearson\'s r',
@@ -352,7 +381,7 @@ READER_EXCLUSIVE_METRICS = {
     'p_rho': 'Spearman\'s ρ p-value',
     'tau': 'Kendall rank correlation',
     'p_tau': 'Kendall tau p-value',
-    'status': 'Validation errors'
+    'status': 'Validation errors',
 }
 
 QA4SM_EXCLUSIVE_METRICS = {
@@ -361,12 +390,17 @@ QA4SM_EXCLUSIVE_METRICS = {
     # 'tau': 'Kendall rank correlation',        # currently QA4SM is hardcoded not to calculate kendall tau
     # 'p_tau': 'Kendall tau p-value',           # needs to be changed once tau is calculated again
     'status': '# status',
-    'ts_slope' : 'Robust median slope estimator',
 }
 
-_metric_name = {**COMMON_METRICS, **READER_EXCLUSIVE_METRICS, **TC_METRICS}
+STABILITY_METRICS = {
+    'ts_slope_R' : 'Theil-Sen slope of R',
+    'ts_slope_urmsd' : 'Theil-Sen slope of urmsd',
+    'ts_slope_BIAS' : 'Theil-Sen slope of BIAS'
+}
 
-METRICS = {**COMMON_METRICS, **QA4SM_EXCLUSIVE_METRICS}
+_metric_name = {**COMMON_METRICS, **READER_EXCLUSIVE_METRICS, **TC_METRICS, **STABILITY_METRICS}
+
+METRICS = {**COMMON_METRICS, **QA4SM_EXCLUSIVE_METRICS, **STABILITY_METRICS}
 
 NON_METRICS = [
     'gpi',
@@ -742,6 +776,9 @@ _metadata_exclude = [
     'tau',
     'p_tau',
     'status',
+    'ts_slope_R',
+    'ts_slope_urmsd',
+    'ts_slope_BIAS',
 ]
 
 METRIC_TEMPLATE = '_between_{ds1}_and_{ds2}'
@@ -785,6 +822,7 @@ TEMPORAL_SUB_WINDOWS = {
         "Nov": [[11, 1], [11, 30]],
         "Dec": [[12, 1], [12, 31]],
     },
+    #Fix as TemporalSubWindowsCreator checks pre-defined tsw on init
     "stability":{
     }
 }

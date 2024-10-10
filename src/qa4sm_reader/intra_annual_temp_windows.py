@@ -155,9 +155,14 @@ class TemporalSubWindowsFactory:
         Factory method to instantiate the appropriate TemporalSubWindowsCreator
         based on the type of metrics passed from the validation run.
         """
-        # Handle intra-annual or stability based on the type passed
-        if temporal_sub_window_type in ['seasons', 'months']:
-            return TemporalSubWindowsFactory._create_intra_annual(temporal_sub_window_type, overlap, period)
+        # Fix mismatch between Validation.intra_annual_types and global TSW terms
+        if temporal_sub_window_type in ['Seasonal', 'Monthly']:
+            temporal_sub_window_mapping = {
+                'Seasonal': 'seasons',
+                'Monthly': 'months'
+            }
+            mapped_type = temporal_sub_window_mapping.get(temporal_sub_window_type, temporal_sub_window_type)
+            return TemporalSubWindowsFactory._create_intra_annual(mapped_type, overlap, period)
 
         elif temporal_sub_window_type == 'stability':
             return TemporalSubWindowsFactory._create_stability(overlap, period, custom_subwindows)
