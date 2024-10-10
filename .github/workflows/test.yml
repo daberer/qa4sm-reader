@@ -7,11 +7,11 @@
 name: tests
 
 on:
-  push:
-  pull_request:
-  workflow_dispatch:
-  schedule: # only upstream, won't trigger on forks!
-    - cron: '0 0 * * *' # daily
+    push:
+    pull_request:
+    workflow_dispatch:
+    schedule: # only upstream, won't trigger on forks!
+        - cron: '0 0 * * *' # daily
 
 jobs:
   build:
