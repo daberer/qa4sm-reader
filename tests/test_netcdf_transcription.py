@@ -467,7 +467,7 @@ def test_correct_file_transcription(seasonal_pytesmo_file, seasonal_qa4sm_file, 
         
 
     # Add annual sub-windows based on the years in the period
-    period = [datetime(year=2009, month=1, day=1), datetime(year=2021, month=12, day=31)]
+    period = [datetime(year=2009, month=1, day=1), datetime(year=2022, month=12, day=31)]
     years = list(range(period[0].year, period[1].year + 1))
 
     globals.add_annual_subwindows(years)
@@ -615,8 +615,9 @@ def test_plotting(seasonal_qa4sm_file, monthly_qa4sm_file, stability_qa4sm_file,
     tmp_monthly_dir = tmp_monthly_file.parent
 
     tmp_stability_file, _ = get_tmp_single_test_file(stability_qa4sm_file, tmp_paths)
+    
     tmp_stability_dir = tmp_stability_file.parent
-
+    
     # check the output directories
 
     pa.plot_all(
@@ -734,6 +735,68 @@ def test_plotting(seasonal_qa4sm_file, monthly_qa4sm_file, stability_qa4sm_file,
             tmp_monthly_dir / tsw / f'{tsw}_statistics_table.csv'
         ).is_file(
         ), f"{tmp_monthly_dir / tsw / f'{tsw}_statistics_table.csv'} does not exist"
+
+
+    # now check the file with stability temporal sub-windows and without tcol metrics and the count of the plots
+
+    pa.plot_all(
+        filepath=tmp_stability_file,
+        temporal_sub_windows=Pytesmo2Qa4smResultsTranscriber.
+        get_tsws_from_ncfile(tmp_stability_file),
+        out_dir=tmp_stability_dir,
+        save_all=True,
+        save_metadata=True,
+        out_type=['png', 'svg'],
+    )
+
+    tsw_dirs_expected = Pytesmo2Qa4smResultsTranscriber.get_tsws_from_ncfile(
+        tmp_stability_file)
+
+    # Subfolders for tsw should not exist in the stability - case
+    for t, tsw in enumerate(tsw_dirs_expected):
+        if tsw == globals.DEFAULT_TSW:
+            assert Path(tmp_stability_dir / tsw).is_dir(), f"{tmp_stability_dir / tsw} is not a directory"
+        else:
+            assert not Path(tmp_stability_dir / tsw).exists(), f"{tmp_stability_dir / tsw} should not exist"
+            continue
+
+        # no tcol metrics present here
+        for metric in [*list(globals.METRICS.keys())]:
+            if metric in metrics_not_plotted:
+                continue
+            # tsw specific plots
+            assert Path(
+                tmp_stability_dir / tsw / f"{tsw}_boxplot_{metric}.png"
+            ).exists(
+            ), f"{tmp_stability_dir / tsw / f'{tsw}_boxplot_{metric}.png'} does not exist"
+            assert Path(
+                tmp_stability_dir / tsw / f"{tsw}_boxplot_{metric}.svg"
+            ).exists(
+            ), f"{tmp_stability_dir / tsw / f'{tsw}_boxplot_{metric}.svg'} does not exist"
+
+            if t == 0:
+                #comparison boxplots
+                assert Path(tmp_stability_dir / 'comparison_boxplots').is_dir()
+                assert Path(
+                    tmp_stability_dir / 'comparison_boxplots' /
+                    globals.CLUSTERED_BOX_PLOT_SAVENAME.format(metric=metric,
+                                                                filetype='png')
+                ).exists(
+                ), f"{tmp_stability_dir / 'comparison_boxplots' / globals.CLUSTERED_BOX_PLOT_SAVENAME.format(metric=metric, filetype='png')} does not exist"
+                assert Path(
+                    tmp_stability_dir / 'comparison_boxplots' /
+                    globals.CLUSTERED_BOX_PLOT_SAVENAME.format(metric=metric,
+                                                                filetype='svg')
+                ).exists(
+                ), f"{tmp_stability_dir / 'comparison_boxplots' / globals.CLUSTERED_BOX_PLOT_SAVENAME.format(metric=metric, filetype='svg')} does not exist"
+        assert Path(
+            tmp_stability_dir / tsw / f'{tsw}_statistics_table.csv'
+        ).is_file(
+        ), f"{tmp_stability_dir / tsw / f'{tsw}_statistics_table.csv'} does not exist"
+    
+        plot_dir = Path(tmp_stability_dir / globals.DEFAULT_TSW)
+        assert len(list(plot_dir.iterdir())) == 63
+        assert all(file.suffix in [".png", ".svg", ".csv"] for file in plot_dir.iterdir()), "Not all files have been saved as .png or .csv"
 
 
 @log_function_call
