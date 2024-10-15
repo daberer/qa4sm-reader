@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 from qa4sm_reader.intra_annual_temp_windows import TemporalSubWindowsCreator, InvalidTemporalSubWindowError
-from qa4sm_reader.globals import    METRICS, TC_METRICS, NON_METRICS, METADATA_TEMPLATE, \
+from qa4sm_reader.globals import    METRICS, TC_METRICS, STABILITY_METRICS, NON_METRICS, METADATA_TEMPLATE, \
                                     IMPLEMENTED_COMPRESSIONS, ALLOWED_COMPRESSION_LEVELS, \
                                     INTRA_ANNUAL_METRIC_TEMPLATE, INTRA_ANNUAL_TCOL_METRIC_TEMPLATE, \
                                     TEMPORAL_SUB_WINDOW_SEPARATOR, DEFAULT_TSW, TEMPORAL_SUB_WINDOW_NC_COORD_NAME, \
@@ -209,6 +209,24 @@ class Pytesmo2Qa4smResultsTranscriber:
         ]
         return any(
             tcol_metric_name.startswith(prefix) for prefix in valid_prefixes)
+    
+    def is_valid_stability_metric_name(self, metric_name):
+        """
+        Checks if a given stability metric name is valid, based on the defined `globals.INTRA_ANNUAL_METRIC_TEMPLATE`.
+
+        Parameters:
+        metric_name (str): The stability metric name to be checked.
+
+        Returns:
+        bool: True if the stability metric name is valid, False otherwise.
+        """
+        valid_prefixes = [
+            "".join(
+                template.format(tsw=tsw, metric=metric)
+                for template in INTRA_ANNUAL_METRIC_TEMPLATE)
+            for tsw in self.provided_tsws for metric in STABILITY_METRICS
+        ]
+        return any(metric_name.startswith(prefix) for prefix in valid_prefixes)
 
     @property
     def metrics_list(self) -> List[str]:
@@ -229,6 +247,7 @@ class Pytesmo2Qa4smResultsTranscriber:
             metric for metric in self.pytesmo_results
             if self.is_valid_metric_name(metric)
             or self.is_valid_tcol_metric_name(metric)
+            or self.is_valid_stability_metric_name(metric)
         ]
 
         if len(_metrics) != 0:  # intra-annual case
