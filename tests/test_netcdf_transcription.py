@@ -795,7 +795,7 @@ def test_plotting(seasonal_qa4sm_file, monthly_qa4sm_file, stability_qa4sm_file,
         ), f"{tmp_stability_dir / tsw / f'{tsw}_statistics_table.csv'} does not exist"
     
         plot_dir = Path(tmp_stability_dir / globals.DEFAULT_TSW)
-        assert len(list(plot_dir.iterdir())) == 63
+        assert len(list(plot_dir.iterdir())) == 69
         assert all(file.suffix in [".png", ".svg", ".csv"] for file in plot_dir.iterdir()), "Not all files have been saved as .png or .csv"
 
 

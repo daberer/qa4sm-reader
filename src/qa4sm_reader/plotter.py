@@ -885,13 +885,14 @@ class QA4SMPlotter:
         fnames_bplot = None
         Metric = self.img.metrics[metric]
         
+        fnames_mapplot = None
         if Metric.name == 'status':
             fnames_bplot = self.barplot(metric='status',
                                         period=period,
                                         out_types=out_types,
                                         save_files=save_all)
 
-        elif Metric.g == 'common' or Metric.g == 'pairwise':
+        elif Metric.g == 'common' or Metric.g == 'pairwise' or Metric.g == 'pairwise_stability':
             fnames_bplot = self.boxplot_basic(metric=metric,
                                               period=period,
                                               out_types=out_types,
@@ -908,9 +909,7 @@ class QA4SMPlotter:
                                                  period=period,
                                                  out_types=out_types,
                                                  save_files=save_all,
-                                                 **plotting_kwargs)
-        else:
-            fnames_mapplot = None
+                                                 **plotting_kwargs)            
 
         return fnames_bplot, fnames_mapplot
 

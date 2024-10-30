@@ -134,16 +134,16 @@ _cclasses = {
         'YlGn'],  # sequential: increasing value good (n_obs, STDerr)
     'qua_neutr':
     get_status_colors(),  # qualitative category with 2 forced colors
-    # Added colormaps for ts_slope metrics
-    'div_ts_BIAS': matplotlib.colormaps[
+    # Added colormaps for slope metrics
+    'div_slopeBIAS': matplotlib.colormaps[
         'RdBu_r'
-    ],  # diverging colormap for ts_slope_BIAS
-    'div_ts_R': matplotlib.colormaps[
+    ],  # diverging colormap for slopeBIAS
+    'div_slopeR': matplotlib.colormaps[
         'PiYG'
-    ],  # diverging colormap for ts_slope_R
-    'div_ts_urmsd': matplotlib.colormaps[
+    ],  # diverging colormap for slopeR
+    'div_slopeURMSD': matplotlib.colormaps[
         'PuOr'
-    ]  # diverging colormap for ts_slope_urmsd
+    ]  # diverging colormap for slopeURMSD
 }
 
 _colormaps = {  # from /qa4sm/validator/validation/graphics.py
@@ -166,9 +166,9 @@ _colormaps = {  # from /qa4sm/validator/validation/graphics.py
     'err_std': _cclasses['seq_worse'],
     'beta': _cclasses['div_neutr'],
     'status': _cclasses['qua_neutr'],
-    'ts_slope_R': _cclasses['div_ts_R'],
-    'ts_slope_urmsd': _cclasses['div_ts_urmsd'],
-    'ts_slope_BIAS': _cclasses['div_ts_BIAS'],
+    'slopeR': _cclasses['div_slopeR'],
+    'slopeURMSD': _cclasses['div_slopeURMSD'],
+    'slopeBIAS': _cclasses['div_slopeBIAS'],
 }
 
 # Colorbars for difference plots
@@ -202,7 +202,7 @@ metric_groups = {
         'mse_bias', 'mse_var', 'RSS', 'tau', 'p_tau', 'status' 
     ],
     'triple': ['snr', 'err_std', 'beta', 'status'],
-    'pairwise_stability': ['ts_slope_urmsd', 'ts_slope_R', 'ts_slope_BIAS']
+    'pairwise_stability': ['slopeURMSD', 'slopeR', 'slopeBIAS']
 }
 
 def get_metric_format(group, metric_dict):
@@ -270,9 +270,9 @@ _metric_value_ranges = {  # from /qa4sm/validator/validation/graphics.py
     'err_std': [None, None],
     'beta': [None, None],
     'status': [-1, len(status)-2],
-    'ts_slope_R': [None, None],
-    'ts_slope_urmsd': [None, None],
-    'ts_slope_BIAS': [None, None],
+    'slopeR': [None, None],
+    'slopeURMSD': [None, None],
+    'slopeBIAS': [None, None],
 }
 # mask values out of range
 _metric_mask_range = {
@@ -304,9 +304,9 @@ _metric_description = {  # from /qa4sm/validator/validation/graphics.py
     'err_std': ' in {}',
     'beta': ' in {}',
     'status': '',
-    'ts_slope_R': '',
-    'ts_slope_urmsd': ' in {}',
-    'ts_slope_BIAS': ' in {}',
+    'slopeR': '',
+    'slopeURMSD': ' in {}',
+    'slopeBIAS': ' in {}',
 }
 
 
@@ -391,9 +391,9 @@ QA4SM_EXCLUSIVE_METRICS = {
 }
 
 STABILITY_METRICS = {
-    'ts_slope_R' : 'Theil-Sen slope of R',
-    'ts_slope_urmsd' : 'Theil-Sen slope of urmsd',
-    'ts_slope_BIAS' : 'Theil-Sen slope of BIAS'
+    'slopeR' : 'Theil-Sen slope of R',
+    'slopeURMSD' : 'Theil-Sen slope of urmsd',
+    'slopeBIAS' : 'Theil-Sen slope of BIAS'
 }
 
 _metric_name = {**COMMON_METRICS, **READER_EXCLUSIVE_METRICS, **TC_METRICS, **STABILITY_METRICS}
@@ -775,9 +775,9 @@ _metadata_exclude = [
     'tau',
     'p_tau',
     'status',
-    'ts_slope_R',
-    'ts_slope_urmsd',
-    'ts_slope_BIAS',
+    'slopeR',
+    'slopeURMSD',
+    'slopeBIAS',
 ]
 
 METRIC_TEMPLATE = '_between_{ds1}_and_{ds2}'

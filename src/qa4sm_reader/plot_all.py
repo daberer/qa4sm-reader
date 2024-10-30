@@ -160,9 +160,7 @@ def plot_all(filepath: str,
         stability = all(item.isdigit() for item in comparison_periods if item != 'bulk')
         cbp = QA4SMCompPlotter(filepath)
         comparison_boxplot_dir = os.path.join(out_dir, globals.CLUSTERED_BOX_PLOT_OUTDIR)
-        #if not stability:
         os.makedirs(comparison_boxplot_dir, exist_ok=True)
-
 
         for available_metric in cbp.metric_kinds_available:
             if available_metric in metrics.keys(

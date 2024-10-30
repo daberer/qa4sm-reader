@@ -291,12 +291,12 @@ class Pytesmo2Qa4smResultsTranscriber:
 
     def mask_redundant_tsw_values(self) -> None:
         """
-        For all variables starting with 'ts_slope_', replace all tsw values ('2010', '2011', etc.) with NaN 
+        For all variables starting with 'slope', replace all tsw values ('2010', '2011', etc.) with NaN 
         except for the default tsw.
         """
-        ts_slope_vars = [var for var in self.transcribed_dataset if var.startswith("ts_slope_")]
+        slope_vars = [var for var in self.transcribed_dataset if var.startswith("slope")]
 
-        for var in ts_slope_vars:
+        for var in slope_vars:
             if TEMPORAL_SUB_WINDOW_NC_COORD_NAME in self.transcribed_dataset[var].dims:              
                 mask = self.transcribed_dataset[var][TEMPORAL_SUB_WINDOW_NC_COORD_NAME] == DEFAULT_TSW
                 self.transcribed_dataset[var] = self.transcribed_dataset[var].where(mask, other=np.nan)
