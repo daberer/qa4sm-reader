@@ -5,9 +5,9 @@ from typing import Union, List, Tuple, Dict
 from itertools import chain
 
 import pandas as pd
+from qa4sm_reader.netcdf_transcription import Pytesmo2Qa4smResultsTranscriber
 from qa4sm_reader.plotter import QA4SMPlotter, QA4SMCompPlotter
 from qa4sm_reader.img import QA4SMImg
-from qa4sm_reader.netcdf_transcription import Pytesmo2Qa4smResultsTranscriber
 import qa4sm_reader.globals as globals
 import numpy as np
 import matplotlib.pyplot as plt
@@ -71,6 +71,7 @@ def plot_all(filepath: str,
     fnames_cbplot: list
         list of filenames for created comparison boxplots
     """
+
 
     if isinstance(save_metadata, bool):
         if not save_metadata:
@@ -155,17 +156,19 @@ def plot_all(filepath: str,
         out_type = [out_type]
     metrics_not_to_plot = list(set(chain(globals._metadata_exclude, globals.metric_groups['triple'], ['n_obs']))) # metadata, tcol metrics, n_obs
     if globals.DEFAULT_TSW in comparison_periods and len(comparison_periods) > 1:
-
         #check if stability metrics where calculated
         stability = all(item.isdigit() for item in comparison_periods if item != 'bulk')
         cbp = QA4SMCompPlotter(filepath)
-        if not os.path.isdir(os.path.join(out_dir, 'comparison_boxplots')):
-            os.makedirs(os.path.join(out_dir, 'comparison_boxplots'))
+        comparison_boxplot_dir = os.path.join(out_dir, globals.CLUSTERED_BOX_PLOT_OUTDIR)
+        #if not stability:
+        os.makedirs(comparison_boxplot_dir, exist_ok=True)
+
 
         for available_metric in cbp.metric_kinds_available:
             if available_metric in metrics.keys(
             ) and available_metric not in metrics_not_to_plot:
-                spth = [Path(out_dir) / 'comparison_boxplots' /
+
+                spth = [Path(out_dir) / globals.CLUSTERED_BOX_PLOT_OUTDIR /
                         f'{globals.CLUSTERED_BOX_PLOT_SAVENAME.format(metric=available_metric, filetype=_out_type)}'
                         for _out_type in out_type]
                 _fig = cbp.plot_cbp(
@@ -202,3 +205,4 @@ def get_img_stats(
     table = img.stats_df()
 
     return table
+

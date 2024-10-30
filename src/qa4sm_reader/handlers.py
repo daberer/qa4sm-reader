@@ -1,16 +1,14 @@
 # -*- coding: utf-8 -*-
 from dataclasses import dataclass
-import warnings
-
 from qa4sm_reader import globals
 from parse import *
-import warnings as warn
+import warnings
 import re
-from typing import List, Optional, Tuple, Dict, Any, Union
-
 import matplotlib
 import matplotlib.axes
 from matplotlib.figure import Figure
+from typing import List, Optional, Tuple, Dict, Any, Union
+
 
 
 class MixinVarmeta:
@@ -139,10 +137,15 @@ class QA4SMDatasets():
             # print(
             #     f'parse(globals._ds_short_name_attr, val_ref): {parse(globals._ds_short_name_attr, self.meta[globals._ref_ds_attr])}'
             # )
+            # print(f'globals._ref_ds_attr: {globals._ref_ds_attr}')
+            # print(f'self.meta: {self.meta}')
+            # print(
+            #     f'parse(globals._ds_short_name_attr, val_ref): {parse(globals._ds_short_name_attr, self.meta[globals._ref_ds_attr])}'
+            # )
             val_ref = self.meta[globals._ref_ds_attr]
             ref_dc = parse(globals._ds_short_name_attr, val_ref)[0]
         except KeyError as e:
-            warn("The netCDF file does not contain the attribute {}".format(
+            warnings.warn("The netCDF file does not contain the attribute {}".format(
                 globals._ref_ds_attr))
             raise e
 
@@ -573,3 +576,4 @@ class CWContainer:
     centers: List[float]
     widths: List[float]
     name: Optional[str] = 'Generic Dataset'
+

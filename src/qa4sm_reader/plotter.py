@@ -858,7 +858,7 @@ class QA4SMPlotter:
                 continue
             if save_files:
                 fnames.extend(fns)
-        plt.close('all')
+                plt.close('all')
 
         if fnames:
             return fnames
@@ -876,8 +876,8 @@ class QA4SMPlotter:
         ----------
         metric: str
             name of the metric
-        out_types: str or list of str, Optional
-            extensions which the files should be saved in. Default is 'png'
+        out_types: str or list
+            extensions which the files should be saved in
         save_all: bool, optional. Default is True.
             all plotted images are saved to the output directory
         plotting_kwargs: arguments for mapplot function.
@@ -1700,8 +1700,6 @@ class QA4SMCompPlotter:
         ----------
         chosen_metric : str
             name of the metric
-        stability : bool
-            If True, the clustered comparison boxplot is created from annual tsw-windows.
         out_name : str or list of str, optional
             name of the output file. Default is None
 
@@ -1712,7 +1710,6 @@ class QA4SMCompPlotter:
 
         """
         anchor_list = None
-
         def get_metric_vars(
                 generic_metric: str) -> Dict[str, hdl.MetricVariable]:
             _dict = {}
@@ -1742,43 +1739,79 @@ class QA4SMCompPlotter:
                     unit=Var.metric_ds[1]["mu"])
                 for Var in get_metric_vars(generic_metric).values()
             }
-        
-        def clean_dataframe(df: pd.DataFrame, column_threshold: float = 0.1, row_threshold_fraction: float = 0.8) -> pd.DataFrame:
+        def sanitize_dataframe(df: pd.DataFrame,
+                               column_threshold: float = 0.1,
+                               row_threshold_fraction: float = 0.8,
+                               keep_empty_cols: bool = True) -> pd.DataFrame:
             """
-            Cleans a DataFrame by dropping columns and rows based on non-NaN thresholds.
+            Sanitizes a DataFrame by dropping columns and rows based on non-NaN thresholds.
 
-            pd.DataFrame: The cleaned DataFrame.
+            Parameters
+            ----------
+            df : pd.DataFrame
+                DataFrame to sanitize
+
+            column_threshold : float, optional
+                Fraction of non-NaN values in a column to keep it. Default is 0.1
+
+            row_threshold_fraction : float, optional
+                Fraction of non-NaN values in a row to keep it. Default is 0.8
+
+            keep_empty_cols : bool
+                Whether to keep column names that have non-NaNs below the threshold, but fill them with exclusively NaN. Default is True.\
+                    This is done for the intra-annual metrics, where each month/season should be represented in the plot\
+                    even if there is no data for a specific month/dataset in the end. The opposite is true for stability metrics.
+
+            Returns
+            -------
+            df_sanitized : pd.DataFrame
+                Sanitized DataFrame
             """
-            #TODO: After cleaning the dataframe of nan values every year has the exact same amount of datapoints, check this and remove number from labels if ok
 
             min_non_nan_columns = int(column_threshold * len(df))
-            df_cleaned = df.dropna(axis=1, thresh=min_non_nan_columns)
-            
-            min_non_nan_rows = int(row_threshold_fraction * len(df_cleaned.columns))
-            df_cleaned = df_cleaned.dropna(thresh=min_non_nan_rows)
-            
-            df_cleaned.dropna(inplace=True)
 
-            return df_cleaned
+            columns_to_keep = df.columns[df.notna().sum() >=
+                                         min_non_nan_columns]
+            columns_to_drop = df.columns[df.notna().sum() <
+                                         min_non_nan_columns]
+
+            df_sanitized = df[columns_to_keep]
+
+            min_non_nan_rows = int(row_threshold_fraction *
+                                   len(df_sanitized.columns))
+
+            df_sanitized = df_sanitized.dropna(thresh=min_non_nan_rows)
+            df_sanitized.dropna(inplace=True)
+
+            if not keep_empty_cols:
+                return df_sanitized
+
+            for col in columns_to_drop:
+                df_sanitized[col] = np.nan
+
+            # Reorder the columns to match the original DataFrame
+            df_sanitized = df_sanitized[df.columns]
+
+            return df_sanitized
 
         metric_df = self.get_metric_df(chosen_metric)
         Vars = get_metric_vars(chosen_metric)
 
         legend_entries = get_legend_entries(cbp_obj=self.cbp,
                                             generic_metric=chosen_metric)
-
+        
+        anchor_list = None
         if stability:
-            # get the first dataset to deduce the number of anchors - important for the boxplot setup
-            unique_groups = metric_df.columns.get_level_values(0).unique()           
-            first_df = metric_df.loc[:, metric_df.columns.get_level_values(0) == unique_groups[0]]
-            first_df = clean_dataframe(first_df)
-
-            anchor_number = len(first_df.columns)
-            anchor_list = np.arange(anchor_number).astype(float)
+             # get the first dataset to deduce the number of anchors - important for the boxplot setup
+             unique_groups = metric_df.columns.get_level_values(0).unique()           
+             first_df = metric_df.loc[:, metric_df.columns.get_level_values(0) == unique_groups[0]]
+             first_df = sanitize_dataframe(first_df, keep_empty_cols=False)
+             anchor_number = len(first_df.columns)
+             anchor_list = np.arange(anchor_number).astype(float)
 
         if anchor_list is None:
             anchor_list = self.cbp.anchor_list
-        
+
 
         centers_and_widths = self.cbp.centers_and_widths(
             anchor_list=anchor_list,
@@ -1794,26 +1827,26 @@ class QA4SMCompPlotter:
             'dpi': 'figure',
             'bbox_inches': 'tight'
         }
+        metric_df = self.get_metric_df(chosen_metric)
+        Vars = get_metric_vars(chosen_metric)
 
+        legend_entries = get_legend_entries(cbp_obj=self.cbp,
+                                            generic_metric=chosen_metric)
+        
         cbp_fig = self.cbp.figure_template(incl_median_iqr_n_axs=False,
                                            fig_kwargs=fig_kwargs)
-
-
+        
         legend_handles = []
         for dc_num, (dc_val_name, Var) in enumerate(Vars.items()):
-            _df = Var.values
-            positions = centers_and_widths[dc_num].centers
-            widths = centers_and_widths[dc_num].widths
-            if stability:
-                _df = clean_dataframe(_df)
-            cleaned_values = _df.dropna().values
-            
-                
-            # Create the boxplot with the adjusted data, positions, and widths
+            _df = Var.values  # get the dataframe for the specific metric, potentially with NaNs
+            if not stability:
+                _df = sanitize_dataframe(_df, keep_empty_cols=True)  # sanitize the dataframe
+            else:
+                _df = sanitize_dataframe(_df, keep_empty_cols=False)  # remove redundant columns
             bp = cbp_fig.ax_box.boxplot(
-                cleaned_values,                
-                positions=positions,
-                widths=widths,
+                [_df[col] for col in _df.columns],
+                positions=centers_and_widths[dc_num].centers,
+                widths=centers_and_widths[dc_num].widths,
                 showfliers=False,
                 patch_artist=True,
             )
@@ -1838,6 +1871,9 @@ class QA4SMCompPlotter:
                 list(globals.CLUSTERED_BOX_PLOT_STYLE['colors'].values())
                 [dc_num])
 
+            for median in bp['medians']:
+                median.set(color='black', linewidth=1.5)
+
         if self.cbp.no_of_ds >= 3:
             _ncols = 3
         else:
@@ -1861,11 +1897,11 @@ class QA4SMCompPlotter:
         def get_xtick_labels(df: pd.DataFrame) -> List:
             _count_dict = df.count().to_dict()
             return [
-                f"{tsw[1]}\nN: {count}" for tsw, count in _count_dict.items()
+                f"{tsw[1]}\nEmpty" if count == 0 else f"{tsw[1]}"
+                for tsw, count in _count_dict.items()
             ]
         xtick_labels = get_xtick_labels(_df)
 
-        # Check if the conditions are met
         if len(xtick_labels) > 19 and stability:
             xtick_labels = [label.replace("\n", " ") for label in xtick_labels]
             cbp_fig.ax_box.set_xticklabels(xtick_labels)
@@ -1881,10 +1917,24 @@ class QA4SMCompPlotter:
             cbp_fig.ax_box.axvline(x=(a + b) / 2, color='lightgrey') for a, b
             in zip(xtick_pos[0].centers[:-1], xtick_pos[0].centers[1:])
         ]
+
+        title = self.create_title(Var, type='boxplot_basic')
+
+        def get_valid_gpis(df: pd.DataFrame) -> int:
+
+            try:
+                out = list({x for x in df.count() if x > 0})[0]
+            except IndexError: # if all values are NaN
+                out = 0
+            return out
+
+        title = title[0:-2] + f'\n for the same {get_valid_gpis(_df)} out of {len(metric_df)} GPIs\n'
+
         cbp_fig.fig.suptitle(
-            self.create_title(Var, type='boxplot_basic'),
+            title,
             fontsize=globals.CLUSTERED_BOX_PLOT_STYLE['fig_params']
             ['title_fontsize'])
+        
         cbp_fig.ax_box.set_ylabel(
             self.create_label(Var),
             fontsize=globals.CLUSTERED_BOX_PLOT_STYLE['fig_params']

@@ -68,6 +68,7 @@ watermark_logo_pth = os.path.join(
         os.path.abspath(__file__)), 'static', 'images', 'logo',
     'QA4SM_logo_long.png')
 
+
 # === filename template ===
 ds_fn_templ = "{i}-{ds}.{var}"
 ds_fn_sep = "_with_"
@@ -247,9 +248,6 @@ _variable_pretty_name = {
     'triple': "{} of {} \n against {}, {}"
 }
 
-# check if every metric has a colormap
-for group in metric_groups.keys():
-    assert all([m in _colormaps.keys() for m in metric_groups[group]])
 
 # Value ranges of metrics, either absolute values, or a quantile between 0 and 1
 _metric_value_ranges = {  # from /qa4sm/validator/validation/graphics.py
@@ -460,6 +458,7 @@ METADATA_TEMPLATE = {
         'frm_class': np.array([' ' * 256]),
     }
 }
+
 
 # BACKUPS
 # =====================================================
@@ -859,7 +858,7 @@ CLUSTERED_BOX_PLOT_STYLE = {
 
 CLUSTERED_BOX_PLOT_SAVENAME = 'comparison_boxplot_{metric}.{filetype}'
 
-
+CLUSTERED_BOX_PLOT_OUTDIR = 'comparison_boxplots'
 
 # netCDF transcription related settings
 # =====================================================
