@@ -148,6 +148,103 @@ class NewSubWindow:
         return self.end_date.strftime('%Y-%m-%d')
 
 
+class TemporalSubWindowsFactory:
+    @staticmethod
+    def create(temporal_sub_window_type: str, overlap: int, period: Optional[List[datetime]], custom_subwindows: Optional[dict] = None):
+        """
+        Factory method to instantiate the appropriate TemporalSubWindowsCreator
+        based on the type of metrics passed from the validation run.
+        """
+        # Handle intra-annual or stability based on the type passed
+        if temporal_sub_window_type in ['seasons', 'months']:
+            return TemporalSubWindowsFactory._create_intra_annual(temporal_sub_window_type, overlap, period)
+
+        elif temporal_sub_window_type == 'stability':
+            return TemporalSubWindowsFactory._create_stability(overlap, period, custom_subwindows)
+
+        return None
+
+    @staticmethod
+    def _create_intra_annual(temporal_sub_window_type: str, overlap: int, period: Optional[List[datetime]]):
+        """
+        Create a TemporalSubWindowsCreator for intra-annual metrics.
+        """
+        temp_sub_wdw_instance = TemporalSubWindowsCreator(
+            temporal_sub_window_type=temporal_sub_window_type,
+            overlap=overlap,
+            custom_file=None  # Default to no custom file for intra-annual metrics
+        )
+
+        # Set default sub-windows
+        if not period:
+            period = [datetime(year=1978, month=1, day=1), datetime.now()]
+
+        default_temp_sub_wndw = NewSubWindow(DEFAULT_TSW, period[0], period[1])
+        temp_sub_wdw_instance.add_temp_sub_wndw(
+            new_temp_sub_wndw=default_temp_sub_wndw,
+            insert_as_first_wndw=True
+        )
+
+        return temp_sub_wdw_instance
+
+    @staticmethod
+    def _create_stability(overlap: int, period: Optional[List[datetime]], custom_subwindows: Optional[dict] = None):
+        """
+        Create a TemporalSubWindowsCreator for stability metrics.
+        """
+        temp_sub_wdw_instance = TemporalSubWindowsCreator(
+            temporal_sub_window_type="stability",
+            overlap=overlap,
+            custom_file=None
+        )
+
+        # Remove existing sub-windows
+        temp_sub_wdw_instance.remove_temp_sub_wndws()
+
+        # Set default sub-windows
+        if not period:
+            period = [datetime(year=1978, month=1, day=1), datetime.now()]
+
+        default_temp_sub_wndw = NewSubWindow(DEFAULT_TSW, period[0], period[1])
+        temp_sub_wdw_instance.add_temp_sub_wndw(default_temp_sub_wndw)
+
+        # Add annual sub-windows based on the years in the period
+        years = list(range(*(map(lambda dt: dt.year, period))))
+        add_annual_subwindows(temp_sub_wdw_instance, years)
+
+        # Add custom sub-windows if provided
+        if custom_subwindows:
+            for key, value in custom_subwindows.items():
+                new_subwindow = NewSubWindow(
+                    name=key,
+                    begin_date=datetime(value[0][0], value[0][1], value[0][2]),
+                    end_date=datetime(value[1][0], value[1][1], value[1][2]),
+                )
+                temp_sub_wdw_instance.add_temp_sub_wndw(new_subwindow)
+
+        return temp_sub_wdw_instance
+
+
+# Helper function to add annual sub-windows
+def add_annual_subwindows(temp_sub_wdw_instance: 'TemporalSubWindowsCreator', years: List[int]):
+    """
+    Add annual sub-windows based on the list of years.
+
+    Parameters
+    ----------
+    temp_sub_wdw_instance: TemporalSubWindowsCreator
+        The instance to which the sub-windows will be added.
+    years: List[int]
+        List of years to generate sub-windows for.
+    """
+    for year in years:
+        temp_sub_wdw_instance.add_temp_sub_wndw(
+            NewSubWindow(f"{year}", datetime(year, 1, 1), datetime(year, 12, 31))
+        )
+
+
+
+
 class TemporalSubWindowsCreator(TemporalSubWindowsDefault):
     '''Class to create custom temporal sub-windows, based on the default definitions.
 
@@ -401,6 +498,15 @@ class TemporalSubWindowsCreator(TemporalSubWindowsDefault):
         except Exception as e:
             print(f'Error: {e}')
             return None
+        
+    def remove_temp_sub_wndws(self) -> None:
+        '''Removes all existing custom temporal sub-windows.
+
+        This method clears both the `custom_temporal_sub_windows` and the `additional_temp_sub_wndws_container`.
+        '''
+        self.custom_temporal_sub_windows.clear()
+        self.additional_temp_sub_wndws_container.clear()
+        print("All custom temporal sub-windows have been removed.")        
 
     @property
     def names(self) -> List[str]:

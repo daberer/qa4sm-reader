@@ -458,7 +458,7 @@ def style_map(
                                                map_resolution,
                                                edgecolor='black',
                                                facecolor='none')
-        ax.add_feature(borders, linewidth=0.2, zorder=3)
+        ax.add_feature(borders, linewidth=0.5, zorder=3)
     if add_us_states:
         ax.add_feature(cfeature.STATES, linewidth=0.1, zorder=3)
 
@@ -670,12 +670,12 @@ def _make_cbar(fig,
     if label is None:
         label = globals._metric_name[metric] + \
                 globals._metric_description[metric].format(
-                    globals.get_metric_units(ref_short)
+                    globals.get_metric_units(ref_short, metric)
                 )
         if scl_short:
             label = globals._metric_name[metric] + \
                     globals._metric_description[metric].format(
-                        globals.get_metric_units(scl_short)
+                        globals.get_metric_units(scl_short, metric)
                     )
 
     extend = get_extend_cbar(metric)

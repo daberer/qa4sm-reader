@@ -141,7 +141,7 @@ class QA4SMComparison:
             img_metrics = {}
             for metric in img.metrics:
                 # hardcoded because n_obs cannot be compared. todo: exclude empty metrics (problem: the values are not loaded here)
-                if metric in glob.metric_groups[0] or metric in [
+                if metric in glob.metric_groups['common'] or metric in [
                         "tau", "p_tau"
                 ]:
                     continue

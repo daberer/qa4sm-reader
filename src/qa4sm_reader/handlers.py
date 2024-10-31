@@ -1,16 +1,14 @@
 # -*- coding: utf-8 -*-
 from dataclasses import dataclass
-import warnings
-
 from qa4sm_reader import globals
 from parse import *
-import warnings as warn
+import warnings
 import re
-from typing import List, Optional, Tuple, Dict, Any, Union
-
 import matplotlib
 import matplotlib.axes
 from matplotlib.figure import Figure
+from typing import List, Optional, Tuple, Dict, Any, Union
+
 
 
 class MixinVarmeta:
@@ -26,14 +24,14 @@ class MixinVarmeta:
             template = ""
         template = template + globals._variable_pretty_name[self.g]
 
-        if self.g == 0:
+        if self.g == 'common':
             name = template.format(self.metric)
 
-        elif self.g == 2:
+        elif self.g == 'pairwise' or self.g == 'pairwise_stability':
             name = template.format(self.Metric.pretty_name,
                                    self.metric_ds[1]['pretty_title'],
                                    self.ref_ds[1]['pretty_title'])
-        elif self.g == 3:
+        elif self.g == 'triple':
             name = template.format(self.Metric.pretty_name,
                                    self.metric_ds[1]['pretty_title'],
                                    self.ref_ds[1]['pretty_title'],
@@ -65,7 +63,7 @@ class MixinVarmeta:
         scale_ds: id, dict
             this is the scaling dataset
         """
-        if self.g == 0:
+        if self.g == 'common':
             ref_ds = self.Datasets.dataset_metadata(self.Datasets._ref_id())
             mds, dss, scale_ds = None, None, None
 
@@ -82,17 +80,17 @@ class MixinVarmeta:
                     warnings.warn(
                         f"ID of scaling reference dataset could not be parsed, "
                         f"units of spatial reference are used.")
-
+        
             ref_ds = self.Datasets.dataset_metadata(self.parts['ref_id'])
             mds = self.Datasets.dataset_metadata(self.parts['sat_id0'])
             dss = None
 
             # if metric is status and globals.metric_groups is 3, add third dataset
-            if self.g == 3 and self.metric == 'status':
+            if self.g == 'triple' and self.metric == 'status':
                 dss = self.Datasets.dataset_metadata(self.parts['sat_id1'])
 
             # if metric is TC, add third dataset
-            elif self.g == 3:
+            elif self.g == 'triple':
                 mds = self.Datasets.dataset_metadata(self.parts['mds_id'])
                 dss = self.Datasets.dataset_metadata(self.parts['sat_id1'])
                 if dss == mds:
@@ -139,10 +137,15 @@ class QA4SMDatasets():
             # print(
             #     f'parse(globals._ds_short_name_attr, val_ref): {parse(globals._ds_short_name_attr, self.meta[globals._ref_ds_attr])}'
             # )
+            # print(f'globals._ref_ds_attr: {globals._ref_ds_attr}')
+            # print(f'self.meta: {self.meta}')
+            # print(
+            #     f'parse(globals._ds_short_name_attr, val_ref): {parse(globals._ds_short_name_attr, self.meta[globals._ref_ds_attr])}'
+            # )
             val_ref = self.meta[globals._ref_ds_attr]
             ref_dc = parse(globals._ds_short_name_attr, val_ref)[0]
         except KeyError as e:
-            warn("The netCDF file does not contain the attribute {}".format(
+            warnings.warn("The netCDF file does not contain the attribute {}".format(
                 globals._ref_ds_attr))
             raise e
 
@@ -409,24 +412,24 @@ class QA4SMVariable():
 
     def _parse_wrap(self, pattern, g):
         """Wrapper function that handles case of metric 'status' that occurs
-        in two globals.metric_groups (2,3). This is because a status array
+        in two globals.metric_groups (pairwise,triple). This is because a status array
         can be the result of a validation between two or three datasets (tc)
         """
-        # ignore this case - (status is also in globals.metric_groups 2 but
-        # should be treated as group 3)
+        # ignore this case - (status is also in pairwise metric_groups but
+        # should be treated as triple metric_group)
         if self.varname.startswith('status') and (self.varname.count('_and_')
-                                                  == 2) and g == 2:
+                                                  == 2) and g == 'pairwise':
             return None
         # parse self.varname when three datasets
         elif self.varname.startswith('status') and (self.varname.count('_and_')
-                                                    == 2) and g == 3:
-            template = globals.var_name_ds_sep[3]
+                                                    == 2) and g == 'triple':
+            template = globals.var_name_ds_sep['triple']
             return parse(
-                '{}{}'.format(globals.var_name_metric_sep[2], template),
+                '{}{}'.format(globals.var_name_metric_sep['pairwise'], template),
                 self.varname)
         return parse(pattern, self.varname)
 
-    def _parse_varname(self) -> Tuple[str, int, dict]:
+    def _parse_varname(self) -> Tuple[str, str, dict]:
         """
         Parse the name to get the metric, group and variable data
 
@@ -434,7 +437,7 @@ class QA4SMVariable():
         -------
         metric : str
             metric name
-        g : int
+        g : str
             group
         parts : dict
             dictionary of MetricVariable data
@@ -442,10 +445,10 @@ class QA4SMVariable():
         metr_groups = list(globals.metric_groups.keys())
         # check which group it belongs to
         for g in metr_groups:
-            template = globals.var_name_ds_sep[g]
+            template = globals.get_metric_format(g, globals.var_name_ds_sep)
             if template is None:
                 template = ''
-            pattern = '{}{}'.format(globals.var_name_metric_sep[g], template)
+            pattern = '{}{}'.format(globals.get_metric_format(g, globals.var_name_metric_sep), template)
             # parse infromation from pattern and name
 
             parts = self._parse_wrap(pattern, g)
@@ -455,7 +458,7 @@ class QA4SMVariable():
                 return parts['metric'], g, parts.named
             # perhaps it's a CI variable
             else:
-                pattern = '{}{}'.format(globals.var_name_CI[g], template)
+                pattern = '{}{}'.format(globals.get_metric_format(g, globals.var_name_CI), template)
                 parts = parse(pattern, self.varname)
                 if parts is not None and parts[
                         'metric'] in globals.metric_groups[g]:
@@ -535,7 +538,7 @@ class QA4SMMetric():
         """
         for n, Var in enumerate(self.variables):
             value = getattr(Var, attr)
-            # special case for "status" attribute (self.g can be 2 or 3)
+            # special case for "status" attribute (self.g can be 'pairwise' or 'triple')
             if n != 0 and not Var.varname.startswith('status'):
                 assert value == previous, "The attribute {} is not equal in all variables".format(
                     attr)
@@ -573,3 +576,4 @@ class CWContainer:
     centers: List[float]
     widths: List[float]
     name: Optional[str] = 'Generic Dataset'
+

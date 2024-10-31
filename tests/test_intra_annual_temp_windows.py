@@ -151,7 +151,7 @@ def test_default_monthly_sub_windows_attributes(
     assert default_monthly_sub_windows_no_overlap.custom_file == default_seasonal_sub_windows_no_overlap.custom_file == None
 
     assert default_monthly_sub_windows_no_overlap.available_temp_sub_wndws == default_seasonal_sub_windows_no_overlap.available_temp_sub_wndws == [
-        'seasons', 'months'
+        'seasons', 'months', 'stability'
     ]
 
     assert default_monthly_sub_windows_no_overlap.names == [
@@ -231,7 +231,7 @@ def test_default_seasonal_sub_windows_attributes(
     assert default_seasonal_sub_windows_no_overlap.custom_file == None
 
     assert default_seasonal_sub_windows_no_overlap.available_temp_sub_wndws == [
-        'seasons', 'months'
+        'seasons', 'months', 'stability'
     ]
 
     assert default_seasonal_sub_windows_no_overlap.names == [

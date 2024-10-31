@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 from qa4sm_reader.intra_annual_temp_windows import TemporalSubWindowsCreator, InvalidTemporalSubWindowError
-from qa4sm_reader.globals import    METRICS, TC_METRICS, NON_METRICS, METADATA_TEMPLATE, \
+from qa4sm_reader.globals import    METRICS, TC_METRICS, STABILITY_METRICS, NON_METRICS, METADATA_TEMPLATE, \
                                     IMPLEMENTED_COMPRESSIONS, ALLOWED_COMPRESSION_LEVELS, \
                                     INTRA_ANNUAL_METRIC_TEMPLATE, INTRA_ANNUAL_TCOL_METRIC_TEMPLATE, \
                                     TEMPORAL_SUB_WINDOW_SEPARATOR, DEFAULT_TSW, TEMPORAL_SUB_WINDOW_NC_COORD_NAME, \
@@ -209,6 +209,24 @@ class Pytesmo2Qa4smResultsTranscriber:
         ]
         return any(
             tcol_metric_name.startswith(prefix) for prefix in valid_prefixes)
+    
+    def is_valid_stability_metric_name(self, metric_name):
+        """
+        Checks if a given stability metric name is valid, based on the defined `globals.INTRA_ANNUAL_METRIC_TEMPLATE`.
+
+        Parameters:
+        metric_name (str): The stability metric name to be checked.
+
+        Returns:
+        bool: True if the stability metric name is valid, False otherwise.
+        """
+        valid_prefixes = [
+            "".join(
+                template.format(tsw=tsw, metric=metric)
+                for template in INTRA_ANNUAL_METRIC_TEMPLATE)
+            for tsw in self.provided_tsws for metric in STABILITY_METRICS
+        ]
+        return any(metric_name.startswith(prefix) for prefix in valid_prefixes)
 
     @property
     def metrics_list(self) -> List[str]:
@@ -229,6 +247,7 @@ class Pytesmo2Qa4smResultsTranscriber:
             metric for metric in self.pytesmo_results
             if self.is_valid_metric_name(metric)
             or self.is_valid_tcol_metric_name(metric)
+            or self.is_valid_stability_metric_name(metric)
         ]
 
         if len(_metrics) != 0:  # intra-annual case
@@ -270,6 +289,18 @@ class Pytesmo2Qa4smResultsTranscriber:
             self.transcribed_dataset = self.transcribed_dataset.drop_dims(
                 'obs')
 
+    def mask_redundant_tsw_values(self) -> None:
+        """
+        For all variables starting with 'slope', replace all tsw values ('2010', '2011', etc.) with NaN 
+        except for the default tsw.
+        """
+        slope_vars = [var for var in self.transcribed_dataset if var.startswith("slope")]
+
+        for var in slope_vars:
+            if TEMPORAL_SUB_WINDOW_NC_COORD_NAME in self.transcribed_dataset[var].dims:              
+                mask = self.transcribed_dataset[var][TEMPORAL_SUB_WINDOW_NC_COORD_NAME] == DEFAULT_TSW
+                self.transcribed_dataset[var] = self.transcribed_dataset[var].where(mask, other=np.nan)
+
     @staticmethod
     def update_dataset_var(ds: xr.Dataset, var: str, coord_key: str,
                            coord_val: str, data_vals: List) -> xr.Dataset:
@@ -303,14 +334,13 @@ class Pytesmo2Qa4smResultsTranscriber:
 
     def get_transcribed_dataset(self) -> xr.Dataset:
         """
-        Get the transcribed dataset, containing all metric and non-metric data provided by the pytesmo results. Metadata
-        is not yet included.
+        Get the transcribed dataset, containing all metric and non-metric data provided by the pytesmo results. 
 
 
         Returns
         -------
         xr.Dataset
-            The transcribed, metadata-less dataset.
+            The transcribed dataset.
         """
         self.only_default_case, self.provided_tsws = self.temporal_sub_windows_checker(
         )
@@ -327,7 +357,7 @@ class Pytesmo2Qa4smResultsTranscriber:
                 _tsw, new_name = new_name.split(TEMPORAL_SUB_WINDOW_SEPARATOR)
 
             if new_name not in self.transcribed_dataset:
-                # takes the data associated with the metric new_name and adds it as a new variabel
+                # takes the data associated with the metric new_name and adds it as a new variable
                 # more precisely, it assigns copies of this data to each temporal sub-window, which is the new dimension
                 self.transcribed_dataset[new_name] = self.pytesmo_results[
                     var_name].expand_dims(
@@ -356,6 +386,7 @@ class Pytesmo2Qa4smResultsTranscriber:
         self.get_pytesmo_attrs()
         self.handle_n_obs()
         self.drop_obs_dim()
+        self.mask_redundant_tsw_values()
 
         self.transcribed_dataset[
             TEMPORAL_SUB_WINDOW_NC_COORD_NAME].attrs = dict(
@@ -715,9 +746,14 @@ class Pytesmo2Qa4smResultsTranscriber:
                     if tsw not in month_order and tsw not in seasons_1_order
                     and tsw not in seasons_2_order
                 ]
-                return customs, list(set(tsw_list) - set(customs))
+                return customs, list(set(tsw_list) - set(customs))          
 
             custom_tsws, tsw_list = get_custom_tsws(tsw_list)
+            
+            if all(tsw.isdigit() for tsw in custom_tsws):
+                custom_tsws = sorted(custom_tsws, key=int)
+
+            
             lens = {len(tsw) for tsw in tsw_list}
 
             if lens == {2} and all(

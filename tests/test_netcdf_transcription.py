@@ -94,6 +94,13 @@ def monthly_qa4sm_file(TEST_DATA_DIR) -> Path:
     return Path(TEST_DATA_DIR / 'intra_annual' / 'monthly' /
                 '0-ISMN.soil_moisture_with_1-C3S.sm_tsw_months_qa4sm.nc')
 
+@pytest.fixture
+def stability_pytesmo_file(TEST_DATA_DIR) -> Path:
+    return Path(TEST_DATA_DIR / 'intra_annual' / 'stability' / '0-ESA_CCI_SM_passive.sm_with_1-ERA5_LAND.swvl1_tsw_stability_pytesmo.nc')
+
+@pytest.fixture
+def stability_qa4sm_file(TEST_DATA_DIR) -> Path:
+    return Path(TEST_DATA_DIR / 'intra_annual' / 'stability' / '0-ESA_CCI_SM_passive.sm_with_1-ERA5_LAND.swvl1_tsw_stability_qa4sm.nc')
 
 #------------------Helper functions------------------------
 
@@ -255,6 +262,8 @@ def test_qr_globals_attributes():
             "Oct": [[10, 1], [10, 31]],
             "Nov": [[11, 1], [11, 30]],
             "Dec": [[12, 1], [12, 31]],
+        },
+        "stability":{
         }
     }
 
@@ -430,8 +439,7 @@ def test_bulk_case_transcription(TEST_DATA_DIR, tmp_paths):
 
 
 @log_function_call
-def test_correct_file_transcription(seasonal_pytesmo_file, seasonal_qa4sm_file,
-                                    monthly_pytesmo_file, monthly_qa4sm_file):
+def test_correct_file_transcription(seasonal_pytesmo_file, seasonal_qa4sm_file, monthly_pytesmo_file, monthly_qa4sm_file, stability_pytesmo_file, stability_qa4sm_file):
     '''
     Test the transcription of the test files with the correct temporal sub-windows and the correct output nc files'''
 
@@ -440,6 +448,8 @@ def test_correct_file_transcription(seasonal_pytesmo_file, seasonal_qa4sm_file,
     assert seasonal_qa4sm_file.exists
     assert monthly_pytesmo_file.exists
     assert monthly_qa4sm_file.exists
+    assert stability_pytesmo_file.exists
+    assert stability_qa4sm_file.exists
 
     # instantiate proper TemporalSubWindowsCreator instances for the corresponding test files
     bulk_tsw = NewSubWindow(
@@ -452,11 +462,30 @@ def test_correct_file_transcription(seasonal_pytesmo_file, seasonal_qa4sm_file,
     monthly_tsws = TemporalSubWindowsCreator('months')
     monthly_tsws.add_temp_sub_wndw(bulk_tsw, insert_as_first_wndw=True)
 
+    stability_tsws = TemporalSubWindowsCreator(temporal_sub_window_type="stability")
+    stability_tsws.add_temp_sub_wndw(bulk_tsw, insert_as_first_wndw=True)
+        
+
+    # Add annual sub-windows based on the years in the period
+    period = [datetime(year=2009, month=1, day=1), datetime(year=2022, month=12, day=31)]
+    years = list(range(period[0].year, period[1].year + 1))
+
+    globals.add_annual_subwindows(years)
+
+    for key, value in globals.TEMPORAL_SUB_WINDOWS['custom'].items():
+        new_subwindow = NewSubWindow(
+            name=key,
+            begin_date=datetime(value[0][0], value[0][1], value[0][2]),
+            end_date=datetime(value[1][0], value[1][1], value[1][2]),
+        )
+        stability_tsws.add_temp_sub_wndw(new_subwindow)
+
+
     # make sure the above defined temporal sub-windows are indeed the ones on the expected output nc files
-    assert seasons_tsws.names == Pytesmo2Qa4smResultsTranscriber.get_tsws_from_ncfile(
-        seasonal_qa4sm_file)
-    assert monthly_tsws.names == Pytesmo2Qa4smResultsTranscriber.get_tsws_from_ncfile(
-        monthly_qa4sm_file)
+    assert seasons_tsws.names == Pytesmo2Qa4smResultsTranscriber.get_tsws_from_ncfile(seasonal_qa4sm_file)
+    assert monthly_tsws.names == Pytesmo2Qa4smResultsTranscriber.get_tsws_from_ncfile(monthly_qa4sm_file)
+    assert stability_tsws.names == Pytesmo2Qa4smResultsTranscriber.get_tsws_from_ncfile(stability_qa4sm_file)
+
 
     # instantiate transcribers for the test files
     seasonal_transcriber = Pytesmo2Qa4smResultsTranscriber(
@@ -469,17 +498,25 @@ def test_correct_file_transcription(seasonal_pytesmo_file, seasonal_qa4sm_file,
         pytesmo_results=monthly_pytesmo_file,
         intra_annual_slices=monthly_tsws,
         keep_pytesmo_ncfile=False)
+    
+    stability_transcriber = Pytesmo2Qa4smResultsTranscriber(
+        pytesmo_results=stability_pytesmo_file,
+        intra_annual_slices=stability_tsws,
+        keep_pytesmo_ncfile=False)
 
     assert seasonal_transcriber.exists
     assert monthly_transcriber.exists
+    assert stability_transcriber.exists
 
     # get the transcribed datasets
     seasonal_transcribed_ds = seasonal_transcriber.get_transcribed_dataset()
     monthly_transcribed_ds = monthly_transcriber.get_transcribed_dataset()
+    stability_transcribed_ds = stability_transcriber.get_transcribed_dataset()
 
     # check that the transcribed datasets are indeed xarray.Dataset instances
     assert isinstance(seasonal_transcribed_ds, xr.Dataset)
     assert isinstance(monthly_transcribed_ds, xr.Dataset)
+    assert isinstance(stability_transcribed_ds, xr.Dataset)
 
     # check that the transcribed datasets are equal to the expected output files
     # xr.testing.assert_equal(ds1, ds2) runs a more detailed comparison of the two datasets as compared to ds1.equals(ds2)
@@ -487,6 +524,8 @@ def test_correct_file_transcription(seasonal_pytesmo_file, seasonal_qa4sm_file,
         expected_seasonal_ds = f
     with xr.open_dataset(monthly_qa4sm_file) as f:
         expected_monthly_ds = f
+    with xr.open_dataset(stability_qa4sm_file) as f:
+        expected_stability_ds = f
 
     #!NOTE: pytesmo/QA4SM offer the possibility to calculate Kendall's tau, but currently this metric is deactivated.
     #!      Therefore, in a real validation run no tau related metrics will be transcribed to the QA4SM file, even though they might be present in the pytesmo file.
@@ -510,13 +549,14 @@ def test_correct_file_transcription(seasonal_pytesmo_file, seasonal_qa4sm_file,
     assert None == xr.testing.assert_equal(
         seasonal_transcribed_ds,
         expected_seasonal_ds)  # returns None if the datasets are equal
+    assert None == xr.testing.assert_equal(stability_transcribed_ds, expected_stability_ds) # returns None if the datasets are equal
 
     # the method above does not check attrs of the datasets, so we do it here
     # Creation date and qa4sm_reader might differ, so we exclude them from the comparison
     datasets = [
         monthly_transcribed_ds, expected_monthly_ds, seasonal_transcribed_ds,
         expected_seasonal_ds
-    ]
+    , stability_transcribed_ds, expected_stability_ds]
     attrs_to_be_excluded = ['date_created', 'qa4sm_version']
     for ds in datasets:
         for attr in attrs_to_be_excluded:
@@ -525,6 +565,7 @@ def test_correct_file_transcription(seasonal_pytesmo_file, seasonal_qa4sm_file,
 
     assert seasonal_transcribed_ds.attrs == expected_seasonal_ds.attrs
     assert monthly_transcribed_ds.attrs == expected_monthly_ds.attrs
+    assert stability_transcribed_ds.attrs == expected_stability_ds.attrs
 
     # Compare the coordinate attributes
     for coord in seasonal_transcribed_ds.coords:
@@ -555,11 +596,12 @@ def test_correct_file_transcription(seasonal_pytesmo_file, seasonal_qa4sm_file,
 
     seasonal_transcribed_ds.close()
     monthly_transcribed_ds.close()
+    stability_transcribed_ds.close()
 
 
 #TODO: refactoring
 @log_function_call
-def test_plotting(seasonal_qa4sm_file, monthly_qa4sm_file, tmp_paths):
+def test_plotting(seasonal_qa4sm_file, monthly_qa4sm_file, stability_qa4sm_file, tmp_paths):
     '''
     Test the plotting of the test files with temporal sub-windows beyond the bulk case (this scenario covered in other tests)
     '''
@@ -572,6 +614,10 @@ def test_plotting(seasonal_qa4sm_file, monthly_qa4sm_file, tmp_paths):
                                                    tmp_paths)
     tmp_monthly_dir = tmp_monthly_file.parent
 
+    tmp_stability_file, _ = get_tmp_single_test_file(stability_qa4sm_file, tmp_paths)
+    
+    tmp_stability_dir = tmp_stability_file.parent
+    
     # check the output directories
 
     pa.plot_all(
@@ -583,10 +629,7 @@ def test_plotting(seasonal_qa4sm_file, monthly_qa4sm_file, tmp_paths):
         out_type=['png', 'svg'],
     )
 
-    metrics_not_plotted = [
-        *globals.metric_groups[0], *globals.metric_groups[3],
-        *globals._metadata_exclude
-    ]
+    metrics_not_plotted = [*globals.metric_groups['common'], *globals.metric_groups['triple'], *globals._metadata_exclude]
 
     tsw_dirs_expected = Pytesmo2Qa4smResultsTranscriber.get_tsws_from_ncfile(
         tmp_seasonal_file)
@@ -692,6 +735,68 @@ def test_plotting(seasonal_qa4sm_file, monthly_qa4sm_file, tmp_paths):
             tmp_monthly_dir / tsw / f'{tsw}_statistics_table.csv'
         ).is_file(
         ), f"{tmp_monthly_dir / tsw / f'{tsw}_statistics_table.csv'} does not exist"
+
+
+    # now check the file with stability temporal sub-windows and without tcol metrics and the count of the plots
+
+    pa.plot_all(
+        filepath=tmp_stability_file,
+        temporal_sub_windows=Pytesmo2Qa4smResultsTranscriber.
+        get_tsws_from_ncfile(tmp_stability_file),
+        out_dir=tmp_stability_dir,
+        save_all=True,
+        save_metadata=True,
+        out_type=['png', 'svg'],
+    )
+
+    tsw_dirs_expected = Pytesmo2Qa4smResultsTranscriber.get_tsws_from_ncfile(
+        tmp_stability_file)
+
+    # Subfolders for tsw should not exist in the stability - case
+    for t, tsw in enumerate(tsw_dirs_expected):
+        if tsw == globals.DEFAULT_TSW:
+            assert Path(tmp_stability_dir / tsw).is_dir(), f"{tmp_stability_dir / tsw} is not a directory"
+        else:
+            assert not Path(tmp_stability_dir / tsw).exists(), f"{tmp_stability_dir / tsw} should not exist"
+            continue
+
+        # no tcol metrics present here
+        for metric in [*list(globals.METRICS.keys())]:
+            if metric in metrics_not_plotted:
+                continue
+            # tsw specific plots
+            assert Path(
+                tmp_stability_dir / tsw / f"{tsw}_boxplot_{metric}.png"
+            ).exists(
+            ), f"{tmp_stability_dir / tsw / f'{tsw}_boxplot_{metric}.png'} does not exist"
+            assert Path(
+                tmp_stability_dir / tsw / f"{tsw}_boxplot_{metric}.svg"
+            ).exists(
+            ), f"{tmp_stability_dir / tsw / f'{tsw}_boxplot_{metric}.svg'} does not exist"
+
+            if t == 0:
+                #comparison boxplots
+                assert Path(tmp_stability_dir / 'comparison_boxplots').is_dir()
+                assert Path(
+                    tmp_stability_dir / 'comparison_boxplots' /
+                    globals.CLUSTERED_BOX_PLOT_SAVENAME.format(metric=metric,
+                                                                filetype='png')
+                ).exists(
+                ), f"{tmp_stability_dir / 'comparison_boxplots' / globals.CLUSTERED_BOX_PLOT_SAVENAME.format(metric=metric, filetype='png')} does not exist"
+                assert Path(
+                    tmp_stability_dir / 'comparison_boxplots' /
+                    globals.CLUSTERED_BOX_PLOT_SAVENAME.format(metric=metric,
+                                                                filetype='svg')
+                ).exists(
+                ), f"{tmp_stability_dir / 'comparison_boxplots' / globals.CLUSTERED_BOX_PLOT_SAVENAME.format(metric=metric, filetype='svg')} does not exist"
+        assert Path(
+            tmp_stability_dir / tsw / f'{tsw}_statistics_table.csv'
+        ).is_file(
+        ), f"{tmp_stability_dir / tsw / f'{tsw}_statistics_table.csv'} does not exist"
+    
+        plot_dir = Path(tmp_stability_dir / globals.DEFAULT_TSW)
+        assert len(list(plot_dir.iterdir())) == 69
+        assert all(file.suffix in [".png", ".svg", ".csv"] for file in plot_dir.iterdir()), "Not all files have been saved as .png or .csv"
 
 
 @log_function_call
@@ -853,5 +958,4 @@ if __name__ == '__main__':
     #                                        keep_pytesmo_ncfile=True)
     # transcriber.pytesmo_results.close()
     # ds.close()
-
     test_bulk_case_transcription()

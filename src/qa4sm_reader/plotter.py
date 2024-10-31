@@ -318,7 +318,7 @@ class QA4SMPlotter:
         for n, Var in enumerate(Vars):
             values = Var.values[Var.varname]
             # changes if it's a common-type Var
-            if Var.g == 0:
+            if Var.g == 'common':
                 box_cap_ds = 'All datasets'
             else:
                 box_cap_ds = self._box_caption(Var, tc=tc)
@@ -409,7 +409,7 @@ class QA4SMPlotter:
             ax.set_title(title, pad=globals.title_pad)
         if self.img.has_CIs:
             offset = 0.08  # offset smaller as CI variables have a larger caption
-        if Var.g == 0:
+        if Var.g == 'common':
             offset = 0.03  # offset larger as common metrics have a shorter caption
 
         # fig.tight_layout()
@@ -674,7 +674,7 @@ class QA4SMPlotter:
             if values.empty:
                 return None
 
-            if len(self.img.triple) and Var.g == 2:
+            if len(self.img.triple) and Var.g == 'pairwise':
                 continue
 
             ref_meta, mds_meta, other_meta, _ = Var.get_varmeta()
@@ -776,7 +776,7 @@ class QA4SMPlotter:
             save_name = self.create_filename(Var=Var,
                                              type="mapplot_status",
                                              period=period)
-        elif Var.g == 0:
+        elif Var.g == 'common':
             title = "{} between all datasets".format(
                 globals._metric_name[metric])
             if period:
@@ -784,7 +784,7 @@ class QA4SMPlotter:
             save_name = self.create_filename(Var,
                                              type='mapplot_common',
                                              period=period)
-        elif Var.g == 2:
+        elif Var.g == 'pairwise' or 'pairwise_stability':
             title = self.create_title(Var=Var,
                                       type='mapplot_basic',
                                       period=period)
@@ -845,7 +845,7 @@ class QA4SMPlotter:
         fnames = []
         for Var in self.img._iter_vars(type="metric",
                                        filter_parms={"metric": metric}):
-            if len(self.img.triple) and Var.g == 2 and metric == 'status':
+            if len(self.img.triple) and Var.g == 'pairwise' and metric == 'status':
                 continue
             if not (np.isnan(Var.values.to_numpy()).all() or Var.is_CI):
                 fns = self.mapplot_var(Var,
@@ -858,7 +858,7 @@ class QA4SMPlotter:
                 continue
             if save_files:
                 fnames.extend(fns)
-        plt.close('all')
+                plt.close('all')
 
         if fnames:
             return fnames
@@ -876,27 +876,29 @@ class QA4SMPlotter:
         ----------
         metric: str
             name of the metric
-        out_types: str or list of str, Optional
-            extensions which the files should be saved in. Default is 'png'
+        out_types: str or list
+            extensions which the files should be saved in
         save_all: bool, optional. Default is True.
             all plotted images are saved to the output directory
         plotting_kwargs: arguments for mapplot function.
         """
+        fnames_bplot = None
         Metric = self.img.metrics[metric]
-
+        
+        fnames_mapplot = None
         if Metric.name == 'status':
             fnames_bplot = self.barplot(metric='status',
                                         period=period,
                                         out_types=out_types,
                                         save_files=save_all)
 
-        elif Metric.g == 0 or Metric.g == 2:
+        elif Metric.g == 'common' or Metric.g == 'pairwise' or Metric.g == 'pairwise_stability':
             fnames_bplot = self.boxplot_basic(metric=metric,
                                               period=period,
                                               out_types=out_types,
                                               save_files=save_all,
                                               **plotting_kwargs)
-        elif Metric.g == 3:
+        elif Metric.g == 'triple':
             fnames_bplot = self.boxplot_tc(metric=metric,
                                            period=period,
                                            out_types=out_types,
@@ -907,9 +909,7 @@ class QA4SMPlotter:
                                                  period=period,
                                                  out_types=out_types,
                                                  save_files=save_all,
-                                                 **plotting_kwargs)
-        else:
-            fnames_mapplot = None
+                                                 **plotting_kwargs)            
 
         return fnames_bplot, fnames_mapplot
 
@@ -1690,6 +1690,7 @@ class QA4SMCompPlotter:
 
     def plot_cbp(self,
                  chosen_metric: str,
+                 stability: bool,
                  out_name: Optional[Union[List, List[str]]] = None) -> matplotlib.figure.Figure:
         """
         Plot a Clustered Boxplot for a chosen metric
@@ -1707,7 +1708,7 @@ class QA4SMCompPlotter:
             the boxplot
 
         """
-
+        anchor_list = None
         def get_metric_vars(
                 generic_metric: str) -> Dict[str, hdl.MetricVariable]:
             _dict = {}
@@ -1797,9 +1798,22 @@ class QA4SMCompPlotter:
 
         legend_entries = get_legend_entries(cbp_obj=self.cbp,
                                             generic_metric=chosen_metric)
+        
+        anchor_list = None
+        if stability:
+             # get the first dataset to deduce the number of anchors - important for the boxplot setup
+             unique_groups = metric_df.columns.get_level_values(0).unique()           
+             first_df = metric_df.loc[:, metric_df.columns.get_level_values(0) == unique_groups[0]]
+             first_df = sanitize_dataframe(first_df, keep_empty_cols=False)
+             anchor_number = len(first_df.columns)
+             anchor_list = np.arange(anchor_number).astype(float)
+
+        if anchor_list is None:
+            anchor_list = self.cbp.anchor_list
+
 
         centers_and_widths = self.cbp.centers_and_widths(
-            anchor_list=self.cbp.anchor_list,
+            anchor_list=anchor_list,
             no_of_ds=self.cbp.no_of_ds,
             space_per_box_cluster=0.9,
             rel_indiv_box_width=0.8)
@@ -1817,29 +1831,17 @@ class QA4SMCompPlotter:
 
         legend_entries = get_legend_entries(cbp_obj=self.cbp,
                                             generic_metric=chosen_metric)
-
-        centers_and_widths = self.cbp.centers_and_widths(
-            anchor_list=self.cbp.anchor_list,
-            no_of_ds=self.cbp.no_of_ds,
-            space_per_box_cluster=0.9,
-            rel_indiv_box_width=0.8)
-
-        figwidth = globals.boxplot_width * (len(metric_df.columns) + 1
-                                            )  # otherwise it's too narrow
-        figsize = [figwidth, globals.boxplot_height]
-        fig_kwargs = {
-            'figsize': figsize,
-            'dpi': 'figure',
-            'bbox_inches': 'tight'
-        }
-
+        
         cbp_fig = self.cbp.figure_template(incl_median_iqr_n_axs=False,
                                            fig_kwargs=fig_kwargs)
-
+        
         legend_handles = []
         for dc_num, (dc_val_name, Var) in enumerate(Vars.items()):
             _df = Var.values  # get the dataframe for the specific metric, potentially with NaNs
-            _df = sanitize_dataframe(_df, keep_empty_cols=True)  # sanitize the dataframe
+            if not stability:
+                _df = sanitize_dataframe(_df, keep_empty_cols=True)  # sanitize the dataframe
+            else:
+                _df = sanitize_dataframe(_df, keep_empty_cols=False)  # remove redundant columns
             bp = cbp_fig.ax_box.boxplot(
                 [_df[col] for col in _df.columns],
                 positions=centers_and_widths[dc_num].centers,
@@ -1883,7 +1885,7 @@ class QA4SMCompPlotter:
             ncols=_ncols)
 
         xtick_pos = self.cbp.centers_and_widths(
-            anchor_list=self.cbp.anchor_list,
+            anchor_list=anchor_list,
             no_of_ds=1,
             space_per_box_cluster=0.7,
             rel_indiv_box_width=0.8)
@@ -1897,8 +1899,14 @@ class QA4SMCompPlotter:
                 f"{tsw[1]}\nEmpty" if count == 0 else f"{tsw[1]}"
                 for tsw, count in _count_dict.items()
             ]
+        xtick_labels = get_xtick_labels(_df)
 
-        cbp_fig.ax_box.set_xticklabels(get_xtick_labels(_df), )
+        if len(xtick_labels) > 19 and stability:
+            xtick_labels = [label.replace("\n", " ") for label in xtick_labels]
+            cbp_fig.ax_box.set_xticklabels(xtick_labels)
+            cbp_fig.ax_box.tick_params(axis='x', rotation=315)
+        else:
+            cbp_fig.ax_box.set_xticklabels(xtick_labels)
         cbp_fig.ax_box.tick_params(
             axis='both',
             labelsize=globals.CLUSTERED_BOX_PLOT_STYLE['fig_params']
