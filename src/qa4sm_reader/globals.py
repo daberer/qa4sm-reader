@@ -823,18 +823,6 @@ TEMPORAL_SUB_WINDOWS = {
     }
 }
 
-def add_annual_subwindows(years):
-    # Loops through each year and create a subwindow for the entire year
-    annual_subwindows = {}
-    for year in years:
-        annual_subwindows[str(year)] = [
-            [year, 1, 1],
-            [year, 12, 31]
-        ]
-    TEMPORAL_SUB_WINDOWS["custom"] = annual_subwindows
-
-
-
 CLUSTERED_BOX_PLOT_STYLE = {
     'fig_params': {
         'title_fontsize': 20,

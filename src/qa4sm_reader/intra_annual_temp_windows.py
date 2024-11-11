@@ -209,7 +209,8 @@ class TemporalSubWindowsFactory:
         temp_sub_wdw_instance.add_temp_sub_wndw(default_temp_sub_wndw)
 
         # Add annual sub-windows based on the years in the period
-        years = list(range(*(map(lambda dt: dt.year, period))))
+        start_year, end_year = map(lambda dt: dt.year, period)
+        years = list(range(start_year, end_year + 1))
         add_annual_subwindows(temp_sub_wdw_instance, years)
 
         # Add custom sub-windows if provided
@@ -239,7 +240,7 @@ def add_annual_subwindows(temp_sub_wdw_instance: 'TemporalSubWindowsCreator', ye
     """
     for year in years:
         temp_sub_wdw_instance.add_temp_sub_wndw(
-            NewSubWindow(f"{year}", datetime(year, 1, 1), datetime(year, 12, 31))
+            NewSubWindow(f"{year}", begin_date=datetime(year, 1, 1), end_date=datetime(year, 12, 31))
         )
 
 

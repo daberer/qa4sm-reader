@@ -10,7 +10,7 @@ import numpy as np
 import tempfile
 
 from qa4sm_reader.netcdf_transcription import Pytesmo2Qa4smResultsTranscriber, TemporalSubWindowMismatchError
-from qa4sm_reader.intra_annual_temp_windows import TemporalSubWindowsCreator, NewSubWindow, InvalidTemporalSubWindowError
+from qa4sm_reader.intra_annual_temp_windows import TemporalSubWindowsCreator, NewSubWindow, InvalidTemporalSubWindowError, TemporalSubWindowsFactory
 import qa4sm_reader.globals as globals
 from qa4sm_reader.utils import log_function_call
 import qa4sm_reader.plot_all as pa
@@ -468,18 +468,8 @@ def test_correct_file_transcription(seasonal_pytesmo_file, seasonal_qa4sm_file, 
 
     # Add annual sub-windows based on the years in the period
     period = [datetime(year=2009, month=1, day=1), datetime(year=2022, month=12, day=31)]
-    years = list(range(period[0].year, period[1].year + 1))
 
-    globals.add_annual_subwindows(years)
-
-    for key, value in globals.TEMPORAL_SUB_WINDOWS['custom'].items():
-        new_subwindow = NewSubWindow(
-            name=key,
-            begin_date=datetime(value[0][0], value[0][1], value[0][2]),
-            end_date=datetime(value[1][0], value[1][1], value[1][2]),
-        )
-        stability_tsws.add_temp_sub_wndw(new_subwindow)
-
+    stability_tsws = TemporalSubWindowsFactory._create_stability(0, period, None)
 
     # make sure the above defined temporal sub-windows are indeed the ones on the expected output nc files
     assert seasons_tsws.names == Pytesmo2Qa4smResultsTranscriber.get_tsws_from_ncfile(seasonal_qa4sm_file)
