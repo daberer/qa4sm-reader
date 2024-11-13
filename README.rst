@@ -2,11 +2,17 @@
 qa4sm_reader
 ============
 
-.. image:: https://github.com/TUW-GEO/qa4sm-reader/workflows/tests/badge.svg
-    :target: https://github.com/TUW-GEO/qa4sm-reader/actions?query=workflow%3Atests
+|ci| |cov| |pip|
 
-.. image:: https://coveralls.io/repos/github/awst-austria/qa4sm-reader/badge.svg?branch=master
-    :target: https://coveralls.io/github/awst-austria/qa4sm-reader?branch=master
+.. |ci| image:: https://github.com/awst-austria/qa4sm-reader/actions/workflows/build.yml/badge.svg?branch=master
+   :target: https://github.com/awst-austria/qa4sm-reader/actions
+
+.. |cov| image:: https://coveralls.io/repos/awst-austria/qa4sm-reader/badge.png?branch=master
+  :target: https://coveralls.io/r/awst-austria/qa4sm-reader?branch=master
+
+.. |pip| image:: https://badge.fury.io/py/qa4sm-reader.svg
+    :target: https://badge.fury.io/py/qa4sm-reader.
+
 
 qa4sm_reader is a python package to read and plot the result files of the `qa4sm service`_.
 
@@ -14,7 +20,7 @@ qa4sm_reader is a python package to read and plot the result files of the `qa4sm
 Installation
 ============
 
-This package should be installable through pip (not yet tough, see development):
+This package should be installable through pip
 
 .. code::
 
@@ -38,9 +44,10 @@ For Development we recommend creating a ``conda`` environment.
 .. code::
 
     cd qa4sm-reader
-    conda env create #  create environment from requirements.rst
-    conda activate qa4sm-reader
-    python setup.py develop #  Links the code to the environment
+    conda env create python=3.10 #  create environment from requirements.rst
+    conda activate qa4sm_reader
+    conda env update -f environment.yml -n qa4sm_reader
+    pip install -e .
 
 To remove the environment again, run:
 

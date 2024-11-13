@@ -4,7 +4,7 @@
 # For more information see:
 # https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
 
-name: tests
+name: CI/CD
 
 on:
     push:
@@ -19,7 +19,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        python-version: [ '3.8', '3.9', '3.10' ]
+        python-version: [ '3.8', '3.9', '3.10']
         os: ["ubuntu-latest"]
         ymlfile: ["environment.yml"]
         include:
@@ -27,7 +27,7 @@ jobs:
             python-version: "3.10"
             ymlfile: "environment.yml"
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           submodules: true
       - uses: conda-incubator/setup-miniconda@v3
@@ -52,16 +52,26 @@ jobs:
           mkdir -p artifacts
           filename=env_py${{ matrix.python-version }}_${{ matrix.os }}.yml
           conda env export --no-builds | grep -v "prefix" > artifacts/$filename
-      - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: Artifacts-py${{ matrix.python-version }}-${{ matrix.os }}
-          path: artifacts/*
       - name: Install package and test
         shell: bash -l {0}
         run: |
           pip install -e .
           pytest
+      - name: Create wheel and dist package
+        shell: bash -l {0}
+        run: |
+          pip install -U setuptools
+          pip install setuptools_scm twine wheel
+          python setup.py --version
+          python setup.py sdist --dist-dir artifacts/dist
+          python setup.py bdist_wheel --dist-dir artifacts/dist
+          ls artifacts/dist
+          twine check artifacts/dist/*
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Artifacts-py${{ matrix.python-version }}-${{ matrix.os }}
+          path: artifacts/*
       - name: Upload Coverage
         shell: bash -l {0}
         run: |
@@ -70,6 +80,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           COVERALLS_FLAG_NAME: ${{ matrix.python-version }}
           COVERALLS_PARALLEL: true
+
   coveralls:
     name: Submit Coveralls 👚
     needs: build
@@ -81,3 +92,34 @@ jobs:
           pip3 install --upgrade coveralls && coveralls --service=github --finish
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-pypi-package:
+    name: Publish PyPI 🚀
+    # Will only trigger when Tests have passed on release/tag from the TUW-GEO repository
+    if: |
+      startsWith(github.ref, 'refs/tags/v') &&
+      startsWith(github.repository, 'awst-austria')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print environment variables
+        run: |
+          echo "GITHUB_REF = $GITHUB_REF"
+          echo "GITHUB_REPOSITORY = $GITHUB_REPOSITORY"
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: Artifacts
+          pattern: Artifacts-*
+          merge-multiple: true
+      - name: Display downloaded files
+        run: ls -aR
+      - name: Upload to PyPI
+        uses: pypa/gh-action-pypi-publish@v1.4.1
+        with:
+          skip_existing: true
+          verbose: true
+          verify_metadata: true
+          packages_dir: Artifacts/dist/
+          user: __token__
+          password: ${{ secrets.PYPI_API_TOKEN }} # this needs to be uploaded to github actions secrets
