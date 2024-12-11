@@ -6,9 +6,9 @@ dependencies:
 - xarray
 - netcdf4
 - pandas
-- numpy<2
+- numpy
 - matplotlib
-- cartopy>=0.21
+- cartopy
 - pyproj
 - h5netcdf
 - pip
@@ -21,3 +21,4 @@ dependencies:
     - pytest
     - pytest-cov
     - pytesmo
+    - cftime
