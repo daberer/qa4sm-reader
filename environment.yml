@@ -6,9 +6,9 @@ dependencies:
 - xarray
 - netcdf4
 - pandas
-- numpy<2
+- numpy>=2.0.0
 - matplotlib
-- cartopy
+- cartopy==0.22.0
 - pyproj
 - h5netcdf
 - pip
