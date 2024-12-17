@@ -1,7 +1,7 @@
 name: qa4sm_reader
 channels:
-- conda-forge
 - defaults
+- conda-forge
 dependencies:
 - xarray>=2024.0.0
 - netcdf4
