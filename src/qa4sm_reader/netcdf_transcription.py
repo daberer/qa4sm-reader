@@ -523,32 +523,32 @@ class Pytesmo2Qa4smResultsTranscriber:
                     if i < retry_count - 1:
                         time.sleep(1)
 
-        for var in self.transcribed_dataset.data_vars:
-            # Check if the data type is Unicode (string type)
-            if self.transcribed_dataset[var].dtype.kind == 'U':
-                # Find the maximum string length in this variable
-                max_len = self.transcribed_dataset[var].str.len().max().item()
-
-                # Create a character array of shape (n, max_len), where n is the number of strings
-                char_array = np.array([
-                    list(s.ljust(max_len))
-                    for s in self.transcribed_dataset[var].values
-                ],
-                                      dtype=f'S1')
-
-                # Create a new DataArray for the character array with an extra character dimension
-                self.transcribed_dataset[var] = xr.DataArray(
-                    char_array,
-                    dims=(self.transcribed_dataset[var].dims[0],
-                          f"{var}_char"),
-                    coords={
-                        self.transcribed_dataset[var].dims[0]:
-                        self.transcribed_dataset[var].coords[
-                            self.transcribed_dataset[var].dims[0]]
-                    },
-                    attrs=self.transcribed_dataset[var].
-                    attrs  # Preserve original attributes if needed
-                )
+        # for var in self.transcribed_dataset.data_vars:
+        #     # Check if the data type is Unicode (string type)
+        #     if self.transcribed_dataset[var].dtype.kind == 'U':
+        #         # Find the maximum string length in this variable
+        #         max_len = self.transcribed_dataset[var].str.len().max().item()
+        #
+        #         # Create a character array of shape (n, max_len), where n is the number of strings
+        #         char_array = np.array([
+        #             list(s.ljust(max_len))
+        #             for s in self.transcribed_dataset[var].values
+        #         ],
+        #                               dtype=f'S1')
+        #
+        #         # Create a new DataArray for the character array with an extra character dimension
+        #         self.transcribed_dataset[var] = xr.DataArray(
+        #             char_array,
+        #             dims=(self.transcribed_dataset[var].dims[0],
+        #                   f"{var}_char"),
+        #             coords={
+        #                 self.transcribed_dataset[var].dims[0]:
+        #                 self.transcribed_dataset[var].coords[
+        #                     self.transcribed_dataset[var].dims[0]]
+        #             },
+        #             attrs=self.transcribed_dataset[var].
+        #             attrs  # Preserve original attributes if needed
+        #         )
 
         # Ensure the dataset is closed
         if isinstance(self.transcribed_dataset, xr.Dataset):
