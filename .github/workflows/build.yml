@@ -38,8 +38,6 @@ jobs:
           environment-file: ${{ matrix.ymlfile }}
           activate-environment: qa4sm_reader # todo: must match with name in environment.yml
           auto-activate-base: false
-      - name: Check for libtiff
-        run: find $CONDA_PREFIX -name libtiff.so.5
       - name: Print environment infos
         shell: bash -l {0}
         run: |
