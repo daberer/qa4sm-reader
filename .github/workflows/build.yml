@@ -34,7 +34,7 @@ jobs:
         if: runner.os == 'Linux'  # Condition to run only on Linux (Ubuntu)
         run: |
           sudo apt-get update
-          sudo apt install libtiff5-dev libtiff-dev
+          sudo apt install libtiff5-dev libtiff-dev libtiff5
       - uses: conda-incubator/setup-miniconda@v3
         with:
           miniconda-version: "latest"
