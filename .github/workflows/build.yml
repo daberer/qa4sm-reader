@@ -38,6 +38,8 @@ jobs:
           environment-file: ${{ matrix.ymlfile }}
           activate-environment: qa4sm_reader # todo: must match with name in environment.yml
           auto-activate-base: false
+      - name: Install libtiff with Conda
+        run: conda install -c conda-forge libtiff
       - name: Print environment infos
         shell: bash -l {0}
         run: |
