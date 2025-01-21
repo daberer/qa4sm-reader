@@ -33,7 +33,7 @@ jobs:
       - name: Install system dependencies (Ubuntu only)
         if: runner.os == 'Linux'  # Condition to run only on Linux (Ubuntu)
         run: |
-          sudo apt-get install libtiff-tools
+          sudo apt-get install libtiff6
       - uses: conda-incubator/setup-miniconda@v3
         with:
           miniconda-version: "latest"
