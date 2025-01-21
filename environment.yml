@@ -11,6 +11,7 @@ dependencies:
 - cartopy>=0.23.0
 - pyproj
 - h5netcdf>=1.4.1
+- libtiff<=4.5.1
 - pip
 - pip:
     - parse
