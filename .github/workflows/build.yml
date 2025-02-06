@@ -30,6 +30,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+      - name: install libtiff dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libtiff-dev
+          sudo ln -s /usr/lib/x86_64-linux-gnu/libtiff.so.6 /usr/lib/x86_64-linux-gnu/libtiff.so.5
       - uses: conda-incubator/setup-miniconda@v3
         with:
           miniconda-version: "latest"
