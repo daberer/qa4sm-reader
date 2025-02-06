@@ -528,14 +528,14 @@ class Pytesmo2Qa4smResultsTranscriber:
         #     if self.transcribed_dataset[var].dtype.kind == 'U':
         #         # Find the maximum string length in this variable
         #         max_len = self.transcribed_dataset[var].str.len().max().item()
-
+        #
         #         # Create a character array of shape (n, max_len), where n is the number of strings
         #         char_array = np.array([
         #             list(s.ljust(max_len))
         #             for s in self.transcribed_dataset[var].values
         #         ],
         #                               dtype=f'S1')
-
+        #
         #         # Create a new DataArray for the character array with an extra character dimension
         #         self.transcribed_dataset[var] = xr.DataArray(
         #             char_array,
@@ -594,7 +594,7 @@ class Pytesmo2Qa4smResultsTranscriber:
                         'complevel': complevel
                     }
                     for var in ds.variables
-                    if not np.issubdtype(ds[var].dtype, np.object_)
+                    if not np.issubdtype(ds[var].dtype, np.object_) and ds[var].dtype.kind in {'i', 'u', 'f'}
                 }
 
             try:

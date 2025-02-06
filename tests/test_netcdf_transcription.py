@@ -408,7 +408,7 @@ def test_ncfile_compression(TEST_DATA_DIR, test_file: Optional[Path] = None):
 
 #-------------------Test default case (= no temporal sub-windows)--------------------------------------------
 
-
+# todo: update this test accordnig to changes in the netcdf_transcription file - commented lines 526-551
 @log_function_call
 def test_bulk_case_transcription(TEST_DATA_DIR, tmp_paths):
     # Test transcription of all original test data nc files (== bulk case files)

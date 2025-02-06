@@ -1372,10 +1372,10 @@ class QA4SMCompPlotter:
                 metric_string: str) -> Union[Tuple[str, str], None]:
             pattern = globals.METRIC_TEMPLATE.format(
                 ds1=
-                '(?P<ds1>\d+-\w+)',  # matches one or more digits (\d+), followed by a hyphen (-), \
+                r'(?P<ds1>\d+-\w+)',  # matches one or more digits (\d+), followed by a hyphen (-), \
                                      # followed by one or more word characters (\w+)
                 ds2=
-                '(?P<ds2>\d+-\w+)',  # matches one or more digits (\d+), followed by a hyphen (-), \
+                r'(?P<ds2>\d+-\w+)',  # matches one or more digits (\d+), followed by a hyphen (-), \
                                      # followed by one or more word characters (\w+)
             )
 
