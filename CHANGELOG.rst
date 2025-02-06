@@ -6,6 +6,16 @@ Unreleased changes in master branch
 ===================================
 -
 
+Version 0.11
+============
+- Environment updated to support Python 3.12
+- numpy updated to >2, and cartopy updated to 0.22.0
+- libtiff version pinned to 4.5.1 due to compatibility issues with Ubuntu 24
+- GitHub Actions updated to run tests for new Python versions
+- geos version pinned for stability
+- Updated setup file
+- Moved cartopy dependency to PyPI
+
 Version 0.10
 ============
 - Fix bugs with metadata plots by @wpreimes in https://github.com/awst-austria/qa4sm-reader/pull/78
