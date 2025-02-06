@@ -30,7 +30,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-      - name: install libtiff dependency
+      - name: install libtiff dependency (Ubuntu only)
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libtiff-dev
