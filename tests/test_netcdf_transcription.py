@@ -409,30 +409,30 @@ def test_ncfile_compression(TEST_DATA_DIR, test_file: Optional[Path] = None):
 #-------------------Test default case (= no temporal sub-windows)--------------------------------------------
 
 # todo: update this test accordnig to changes in the netcdf_transcription file - commented lines 526-551
-# @log_function_call
-# def test_bulk_case_transcription(TEST_DATA_DIR, tmp_paths):
-#     # Test transcription of all original test data nc files (== bulk case files)
-#     tmp_test_data_dir, _ = get_tmp_whole_test_data_dir(TEST_DATA_DIR,
-#                                                        tmp_paths)
-#     nc_files = [
-#         path for path in Path(tmp_test_data_dir).rglob('*.nc')
-#         if 'intra_annual' not in str(path)
-#     ]
-#     logging.info(f"Found {len(nc_files)} .nc files for transcription.")
-#
-#     for ncf in nc_files:
-#         _, ds = run_test_transcriber(ncf,
-#                                      intra_annual_slices=None,
-#                                      keep_pytesmo_ncfile=False,
-#                                      write_outfile=True)
-#         assert ds.sel(
-#             {globals.TEMPORAL_SUB_WINDOW_NC_COORD_NAME:
-#              globals.DEFAULT_TSW}) == globals.DEFAULT_TSW
-#         logging.info(f"Successfully transcribed file: {ncf}")
-#         ds.close()
-#
-#     if tmp_test_data_dir.exists():
-#         shutil.rmtree(tmp_test_data_dir, ignore_errors=True)
+@log_function_call
+def test_bulk_case_transcription(TEST_DATA_DIR, tmp_paths):
+    # Test transcription of all original test data nc files (== bulk case files)
+    tmp_test_data_dir, _ = get_tmp_whole_test_data_dir(TEST_DATA_DIR,
+                                                       tmp_paths)
+    nc_files = [
+        path for path in Path(tmp_test_data_dir).rglob('*.nc')
+        if 'intra_annual' not in str(path)
+    ]
+    logging.info(f"Found {len(nc_files)} .nc files for transcription.")
+
+    for ncf in nc_files:
+        _, ds = run_test_transcriber(ncf,
+                                     intra_annual_slices=None,
+                                     keep_pytesmo_ncfile=False,
+                                     write_outfile=True)
+        assert ds.sel(
+            {globals.TEMPORAL_SUB_WINDOW_NC_COORD_NAME:
+             globals.DEFAULT_TSW}) == globals.DEFAULT_TSW
+        logging.info(f"Successfully transcribed file: {ncf}")
+        ds.close()
+
+    if tmp_test_data_dir.exists():
+        shutil.rmtree(tmp_test_data_dir, ignore_errors=True)
 
 
 #-------------------------------------------Test with intra-annual metrics---------------------------------------------
