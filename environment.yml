@@ -12,6 +12,7 @@ dependencies:
 - pyproj
 - h5netcdf>=1.4.1
 - libtiff<=4.5.1
+- hdf5=1.14.5=h2b7332f_0
 - pip
 - pip:
     - parse
