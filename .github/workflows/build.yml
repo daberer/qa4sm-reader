@@ -47,11 +47,22 @@ jobs:
       - name: Print environment infos
         shell: bash -l {0}
         run: |
+          current_hdf5_version=$(conda list hdf5 | grep hdf5 | awk '{print $1"="$2}')
           conda info -a
           conda list
           pip list
           which pip
           which python
+      - name: Fix hdf5 version if needed (Ubuntu only)
+        if: runner.os == 'Linux'
+        shell: bash -l {0}
+        run: |
+          if [[ "$current_hdf5_version" == "hdf5=1.14.5=h2b7332f_1" ]]; then
+            echo "Current hdf5 version is 1.14.5 with build h2b7332f_1. Installing hdf5=1.14.5=h2b7332f_0."
+            conda install hdf5=1.14.5=h2b7332f_0 --channel conda-forge
+          else
+            echo "No change needed. Current hdf5 version: $current_hdf5_version."
+          fi
       - name: Export Environment
         shell: bash -l {0}
         run: |
