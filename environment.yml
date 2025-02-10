@@ -12,6 +12,13 @@ dependencies:
 - pyproj
 - h5netcdf>=1.4.1
 - libtiff<=4.5.1
+  - selectors:
+      - selector: selectors.platform == 'win'
+        dependencies:
+          - hdf5  # Use a version/build compatible with Windows
+      - selector: selectors.platform == 'linux'
+        dependencies:
+          - hdf5=1.14.5=h2b7332f_0  # Use the desired version on Ubuntu
 - pip
 - pip:
     - parse
