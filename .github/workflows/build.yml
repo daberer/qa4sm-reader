@@ -57,8 +57,8 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash -l {0}
         run: |
-          if [[ "$current_hdf5_version" == "hdf5=1.14.5=h2b7332f_1" ]]; then
-            echo "Current hdf5 version is 1.14.5 with build h2b7332f_1. Installing hdf5=1.14.5=h2b7332f_0."
+          if [[ "$current_hdf5_version" == "hdf5=1.14.5" ]]; then
+            echo "The newest build for hdf5 1.14.5 is h2b7332f_1. Installing hdf5=1.14.5=h2b7332f_0 instead, as the newest version crashes our package."
             conda install hdf5=1.14.5=h2b7332f_0 --channel conda-forge
           else
             echo "No change needed. Current hdf5 version: $current_hdf5_version."
