@@ -4,7 +4,7 @@ Changelog
 
 Unreleased changes in master branch
 ===================================
--
+- ISMN metadata boxplots split by network (`PR #97 <https://github.com/awst-austria/qa4sm-reader/pull/97>`_)
 
 Version 0.11
 ============
