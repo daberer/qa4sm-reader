@@ -788,7 +788,7 @@ class QA4SMPlotter:
             save_name = self.create_filename(Var,
                                              type='mapplot_common',
                                              period=period)
-        elif Var.g == 'pairwise' or 'pairwise_stability':
+        elif Var.g == 'pairwise' or Var.g == 'pairwise_stability':
             title = self.create_title(Var=Var,
                                       type='mapplot_basic',
                                       period=period)
