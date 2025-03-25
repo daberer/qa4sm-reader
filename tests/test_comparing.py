@@ -9,6 +9,8 @@ from qa4sm_reader.comparing import QA4SMComparison, SpatialExtentError
 from qa4sm_reader.img import QA4SMImg
 
 import pandas as pd
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 # if sys.platform.startswith("win"):
