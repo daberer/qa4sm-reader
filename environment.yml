@@ -13,6 +13,7 @@ dependencies:
 - h5netcdf>=1.4.1
 - libtiff<=4.5.1
 - hdf5
+- qtbase<=6.7.2
 - pip
 - pip:
     - parse
