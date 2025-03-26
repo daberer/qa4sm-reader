@@ -9,6 +9,7 @@ Version 0.11.1
 ===================================
 - ISMN metadata boxplots split by network (`PR #97 <https://github.com/awst-austria/qa4sm-reader/pull/97>`_)
 - Fix filenames of triple collocation mapplots
+- Restrict qtbase to versions <= 6.7.2
 
 Version 0.11
 ============
