@@ -421,7 +421,6 @@ def test_bulk_case_transcription(TEST_DATA_DIR, tmp_paths):
     logging.info(f"Found {len(nc_files)} .nc files for transcription.")
 
     for i, ncf in enumerate(nc_files):
-        if i != 12:continue
         _, ds = run_test_transcriber(ncf,
                                      intra_annual_slices=None,
                                      keep_pytesmo_ncfile=False,
