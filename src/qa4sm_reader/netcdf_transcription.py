@@ -497,9 +497,9 @@ class Pytesmo2Qa4smResultsTranscriber:
         if encoding is None:
             encoding = {}
             for var in self.transcribed_dataset.variables:
-                if not np.issubdtype(self.transcribed_dataset[var].dtype,
-                                     np.object_):
-                    encoding[str(var)] = {'zlib': True, 'complevel': 1}
+                if np.issubdtype(self.transcribed_dataset[var].dtype,
+                                 np.number):
+                    encoding[str(var)] = {'zlib': True, 'complevel': 6}
                 else:
                     encoding[str(var)] = {'zlib': False}
 
@@ -651,7 +651,7 @@ class Pytesmo2Qa4smResultsTranscriber:
 
         with xr.open_dataset(ncfile) as ds:
             try:
-                return list(ds[TEMPORAL_SUB_WINDOW_NC_COORD_NAME].values)
+                return ds[TEMPORAL_SUB_WINDOW_NC_COORD_NAME].values.tolist()
             except KeyError:
                 return None
 
@@ -746,10 +746,10 @@ class Pytesmo2Qa4smResultsTranscriber:
                     if tsw not in month_order and tsw not in seasons_1_order
                     and tsw not in seasons_2_order
                 ]
-                return customs, list(set(tsw_list) - set(customs))          
+                return customs, list(set(tsw_list) - set(customs))
 
             custom_tsws, tsw_list = get_custom_tsws(tsw_list)
-            
+
             if all(tsw.isdigit() for tsw in custom_tsws):
                 custom_tsws = sorted(custom_tsws, key=int)
 
