@@ -4,6 +4,9 @@ Changelog
 
 Unreleased changes in master branch
 ===================================
+
+Version 0.11.2
+===================================
 - Update dependencies, remove environment.yml
 - Fix empty comparison plot generation in stability case
 
