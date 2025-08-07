@@ -15,8 +15,6 @@ on:
 
 jobs:
   build:
-    env:
-      PIP_USE_PEP517: 1
     name: Build py${{ matrix.python-version }} @ ${{ matrix.os }} 🐍
     runs-on: ${{ matrix.os }}
     strategy:
@@ -48,6 +46,15 @@ jobs:
           pip list
           which pip
           which python
+      - name: Install compatibility dependencies
+        shell: bash -l {0}
+        run: |
+          pip install "setuptools_scm<7.0.0" setuptools_scm[toml]
+          pip install "setuptools<70"
+      - name: Install package
+        shell: bash -l {0}
+        run: |
+          pip install -e .[building,testing]
       - name: Install package
         shell: bash -l {0}
         run: |
