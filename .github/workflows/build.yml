@@ -15,6 +15,8 @@ on:
 
 jobs:
   build:
+    env:
+      PIP_USE_PEP517: 1
     name: Build py${{ matrix.python-version }} @ ${{ matrix.os }} 🐍
     runs-on: ${{ matrix.os }}
     strategy:
