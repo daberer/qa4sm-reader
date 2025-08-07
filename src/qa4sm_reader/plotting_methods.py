@@ -41,20 +41,17 @@ from collections import namedtuple
 cconfig['data_dir'] = os.path.join(os.path.dirname(__file__), 'cartopy')
 
 
-def _float_gcd(a, b, atol=1e-08):
-    "Greatest common divisor (=groesster gemeinsamer teiler)"
-    while abs(b) > atol:
-        a, b = b, a % b
-    return a
-
-
-def _get_grid(a):
+def _get_grid(a, min_tol=1e-4):
     "Find the stepsize of the grid behind a and return the parameters for that grid axis."
     a = np.unique(a)  # get unique values and sort
-    das = np.unique(np.diff(a))  # get unique stepsizes and sort
-    da = das[0]  # get smallest stepsize
-    for d in das[1:]:  # make sure, all stepsizes are multiple of da
-        da = _float_gcd(d, da)
+    
+    if len(a) < 2:
+        return a[0], a[0], 0, 1
+    
+    das = np.diff(a)  # get all stepsizes
+    das = das[das > min_tol]  # filter out floating point errors, hi res datasets should be 0.001
+    da = np.min(das)  # get the minimum meaningful stepsize
+
     a_min = a[0]
     a_max = a[-1]
     len_a = int((a_max - a_min) / da + 1)
@@ -1646,6 +1643,7 @@ def mapplot(
     figsize: Optional[Tuple[float, float]] = globals.map_figsize,
     dpi: Optional[int] = globals.dpi_min,
     diff_map: Optional[bool] = False,
+    is_scattered: Optional[bool] = False,
     **style_kwargs: Dict
 ) -> Tuple[matplotlib.figure.Figure, matplotlib.axes.Axes]:
     """
@@ -1728,7 +1726,7 @@ def mapplot(
     fig, ax, cax = init_plot(figsize, dpi, add_cbar, projection)
 
     # scatter point or mapplot
-    if ref_short in globals.scattered_datasets:  # scatter
+    if ref_short in globals.scattered_datasets or is_scattered:  # scatter
         if not plot_extent:
             plot_extent = get_plot_extent(df)
 
@@ -1801,6 +1799,7 @@ def plot_spatial_extent(
     intersection_extent: tuple = None,
     reg_grid=False,
     grid_stepsize=None,
+    is_scattered=False,
     **kwargs,
 ):
     """
@@ -1866,7 +1865,7 @@ def plot_spatial_extent(
             },
         ]
         # mapplot with imshow for gridded (non-ISMN) references
-        if reg_grid:
+        if reg_grid and not is_scattered:
             plot_df = []
             for n, (point_set, style, name) in enumerate(
                     zip((selected, outside), marker_styles,
@@ -1936,6 +1935,7 @@ def plot_spatial_extent(
                framealpha=0.95,
                facecolor="white",
                edgecolor="white")
+    plt.tight_layout()
 
 
 def _res2dpi_fraction(res, units):
