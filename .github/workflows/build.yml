@@ -49,12 +49,17 @@ jobs:
       - name: Install compatibility dependencies
         shell: bash -l {0}
         run: |
-          # Force install newer pygeobase first
-          pip install "pygeobase>=0.6.3"
+          # Install specific versions in order
+          pip install "pygeobase==0.6.3"
+          pip install "pytesmo==0.18.0" 
+          pip install "numpy==2.0.2" 
       - name: Install package
         shell: bash -l {0}
         run: |
+          pip install --no-deps -e .
+          # Then install the remaining deps
           pip install -e .[building,testing]
+
       - name: Export Environment
         shell: bash -l {0}
         run: |
