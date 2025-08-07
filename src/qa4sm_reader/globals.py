@@ -27,7 +27,8 @@ data_crs = ccrs.PlateCarree()  # Default map projection. use one of
 # === map plot defaults ===
 scattered_datasets = [
     'ISMN'
-]  # dataset names which require scatterplots (values is scattered in lat/lon)
+]  # dataset names which require scatterplots (values is scattered in lat/lon) fallback for legacy validations
+# currently handled in Dataset model that are passed to the global attrs of the nc file (val_is_scattered_data)
 map_figsize = [11.32, 6.10]  # size of the output figure in inches.
 naturalearth_resolution = '110m'  # One of '10m', '50m' and '110m'. Finer resolution slows down plotting. see https://www.naturalearthdata.com/
 crs = ccrs.PlateCarree(

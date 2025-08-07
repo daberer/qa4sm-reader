@@ -761,6 +761,7 @@ class QA4SMPlotter:
         if scl_meta:
             scl_short = scl_meta[1]['short_name']
 
+        is_scattered = Var.attrs.get('val_is_scattered_data') == 'True'
         # create mapplot
         fig, ax = plm.mapplot(
             df=Var.values[Var.varname],
@@ -770,6 +771,7 @@ class QA4SMPlotter:
             plot_extent=
             None,  # if None, extent is automatically adjusted (as opposed to img.extent)
             scl_short=scl_short,
+            is_scattered=is_scattered,
             **style_kwargs)
 
         # title and plot settings depend on the metric group
