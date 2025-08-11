@@ -34,7 +34,7 @@ dependencies = [
     "colorcet",
     "parse",
     "scipy",
-    "pygeogrids @ git+https://github.com/daberer/pygeogrids.git@1c2735bed77198b7d1155984bc94336230eaf171",
+    "pygeogrids",
     "pytesmo",
 ]
 dynamic = ["version"]
