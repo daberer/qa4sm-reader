@@ -1,8 +1,16 @@
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict
+from qa4sm_reader.plotting_methods import (get_value_range, _replace_status_values, init_plot, get_plot_extent, Patch, geotraj_to_geo2d, _make_cbar, style_map)
+import copy
+from qa4sm_reader import globals
 import pandas as pd
 import cartopy.crs as ccrs
 import matplotlib.pyplot as plt
 import cartopy.feature as cfeature
+import xarray as xr
+import seaborn as sns
+import re
+import numpy as np
+sns.set_context("notebook")
 
 status = {
     -1: 'Other error',
@@ -18,23 +26,37 @@ status = {
 }
 metric_value_ranges = {  # from /qa4sm/validator/validation/graphics.py
     'R': [-1, 1],
+    'R_ci_lower': [-1, 1],
+    'R_ci_upper': [-1, 1],
     'p_R': [0, 1],  # probability that observed correlation is statistical fluctuation
     'rho': [-1, 1],
+    'rho_ci_lower': [-1, 1],
+    'rho_ci_upper': [-1, 1],
     'p_rho': [0, 1],
     'tau': [-1, 1],
     'p_tau': [0, 1],
     'RMSD': [0, None],
     'BIAS': [None, None],
+    'BIAS_ci_lower': [None, None],
+    'BIAS_ci_upper': [None, None],
     'n_obs': [0, None],
     'urmsd': [0, None],
+    'urmsd_ci_lower': [0, None],
+    'urmsd_ci_upper': [0, None],
     'RSS': [0, None],
     'mse': [0, None],
     'mse_corr': [0, None],
     'mse_bias': [0, None],
     'mse_var': [0, None],
     'snr': [None, None],
+    'snr_ci_lower': [None, None],
+    'snr_ci_upper': [None, None],
     'err_std': [None, None],
+    'err_std_ci_lower': [None, None],
+    'err_std_ci_upper': [None, None],
     'beta': [None, None],
+    'beta_ci_lower': [None, None],
+    'beta_ci_upper': [None, None],
     'status': [-1, len(status)-2],
     'slopeR': [None, None],
     'slopeURMSD': [None, None],
@@ -42,59 +64,37 @@ metric_value_ranges = {  # from /qa4sm/validator/validation/graphics.py
 }
 
 
-
-def combined_boxplot(dataframes: list, columnnames: list[list[str]],
-                     output_dir: str,
-                     title: Optional[str] = None):
+def select_column_by_all_keywords(dataframe: pd.DataFrame, keywords: list, metric: str) -> str:
     """
-    Combines multiple DataFrames and creates a boxplot for specified columns.
+    Select a column name from a dataframe based on the presence of all keywords.
 
     Parameters:
-    - dataframes: list of pd.DataFrame, the DataFrames to include in the combined plot.
-    - columnnames: list of list of str, where each sublist contains column names
-                   to extract and include in the combined boxplot.
-    - output_dir: str, path to save the plot.
-    - title: Optional[str], title for the boxplot (default: None).
+    dataframe (pd.DataFrame): The dataframe from which to select the column.
+    keywords (list): A list of keywords that must all be present in the column name.
+
+    Returns:
+    str: The name of the first column that matches all the keywords. None if no column matches.
     """
+    if metric.lower().startswith("snr") or metric.lower().startswith("err_std") or metric.lower().startswith("beta"):
+        if len(keywords) > 1:
+            raise ValueError("Only one dataset is allowed for this metric. "
+                             "Please add only the dataset to the dataset list of "
+                             "which you want to get the metric value. E.g."
+                             "signal to noise ratio: ['snr'] of the dataset: 'ISMN'")
+        for column in dataframe.columns:
+            # Check if all keywords are present in the column name (case insensitive)
+            if all(re.search(keyword, column, re.IGNORECASE) for keyword in
+                   keywords) and column.lower.startswith(metric.lower()):
+                return column
+        return None
+    else:
+        for column in dataframe.columns:
+            # Check if all keywords are present in the column name (case insensitive)
+            if all(re.search(keyword, column, re.IGNORECASE) for keyword in
+                   keywords) and column.lower().startswith(metric.lower()):
+                return column
+        return None
 
-
-    if len(dataframes) != len(columnnames):
-        raise ValueError(
-            "The number of DataFrames must match the number of column name lists.")
-
-    # Step 1: Combine all data based on specified columns
-    combined_data = []
-    for df, cols in zip(dataframes, columnnames):
-        for col in cols:
-            if col not in df.columns:
-                raise ValueError(f"Column '{col}' is not in the DataFrame.")
-
-            # Add the data along with a label indicating the source DataFrame/column
-            combined_data.append(pd.DataFrame({
-                "value": df[col].dropna(),
-                # Drop NaN values for correct plotting
-                "source": col  # Source label for grouping
-            }))
-
-    combined_df = pd.concat(combined_data, ignore_index=True)
-
-    # Step 2: Create the boxplot
-    plt.figure(figsize=(12, 8))
-    combined_df.boxplot(by="source", column=["value"], grid=False,
-                        return_type="axes")
-    plt.suptitle("")  # Remove the default title added by pandas
-    if title:
-        plt.title(title)
-    plt.xlabel("Source (Columns)")
-    plt.ylabel("Values")
-    plt.grid(visible=True, linestyle="--", alpha=0.7)
-
-    # Save the plot
-    output_path = f"{output_dir}/combined_boxplot.png"
-    plt.savefig(output_path, bbox_inches="tight")
-    plt.close()
-
-    print(f"Boxplot saved to {output_path}")
 
 
 def validate_and_subset_data(df: pd.DataFrame, column_name: str) -> Tuple[
@@ -120,7 +120,6 @@ def validate_and_subset_data(df: pd.DataFrame, column_name: str) -> Tuple[
     # Subset DataFrame for the specified column
     if column_name not in df.columns:
         raise ValueError(f"Column '{column_name}' not found in the DataFrame.")
-    # metric_data = df[["idx", "lat", "lon", column_name]].dropna()
     metric_data = df[["lat", "lon", column_name]].dropna()
     label = column_name
 
@@ -159,96 +158,318 @@ def calculate_padded_extent(df: pd.DataFrame,
             min_lat - padding_lat, max_lat + padding_lat)
 
 
-def plot_static_map(df: pd.DataFrame, column_name: str, colormap: str, output_dir: str,
-                    plotsize: Tuple[float, float],
-                    extent: Tuple[float, float, float, float],
-                    value_range: Optional[Tuple[float, float]] = None,
-                    metric: Optional[str] = None):
-    """
-    Plot the static map using Matplotlib and Cartopy.
 
-    Parameters:
-    - df: pd.DataFrame containing the metric data with 'lat' and 'lon'.
-    - column_name: str, Column name of the metric to display.
-    - colormap: str, Name of the colormap.
-    - plotsize: tuple (width, height) for the figure size.
-    - extent: tuple of padded lat/lon boundaries.
-    """
-    # Create a figure and an axis with a specific map projection
-    fig, ax = plt.subplots(figsize=plotsize,
-                           subplot_kw={'projection': ccrs.PlateCarree()})
 
-    # Add geographical features
+
+class CustomPlotObject:
+    """
+    A class to handle NetCDF file data and plot static maps using map_plot function.
+
+    Attributes:
+    - nc_file_path (str): Path to the NetCDF file.
+    - df (pd.DataFrame): DataFrame created from the NetCDF file.
+    """
+
+    def __init__(self, nc_file_path: str):
+        self.nc_file_path = nc_file_path
+        self.df = xr.open_dataset(nc_file_path).to_dataframe().set_index(['lat', 'lon'])
+
+
+
+    def plot_map(self, metric: str, output_dir: str,
+                 colormap: Optional[str] = None,
+                 value_range: Optional[Tuple[float, float]] = None,
+                 plotsize: Optional[Tuple[float, float]] = (16, 10),
+                 extent: Optional[Tuple[float, float, float, float]] = None,
+                 ref_dataset: str = None,
+                 colorbar_label: Optional[str] = None,
+                 title: Optional[str] = None,
+                 title_fontsize: Optional[int] = None,
+                 colorbar_fontsize: Optional[int] = None,
+                 dataset_list: list = None,):
+        """
+        Generates a map plot for a specified metric and saves it to the specified
+        output directory. The function uses the custom_mapplot function for plotting
+        and performs a series of checks and validations on the input parameters before
+        proceeding.
+
+        Args:
+            metric: The name of the metric to be plotted. Must correspond to a
+                valid column in the DataFrame.
+            output_dir: The directory where the output plot will be saved.
+            colormap: Optional; The name of the colormap to use for the plot.
+            value_range: Optional; A tuple specifying the minimum and maximum range
+                of values for the metric to be displayed in the plot.
+            plotsize: Optional; A tuple specifying the size of the output plot in inches.
+            extent: Optional; A tuple specifying the geographical extent of the map.
+                Must be in the format (min_longitude, max_longitude, min_latitude,
+                max_latitude).
+            ref_dataset: Optional; The reference dataset to use for comparison or
+                alignment in the map plot.
+            colorbar_label: Optional; The label to use for the colorbar in the plot.
+            title: Optional; The title of the map plot.
+            title_fontsize: Optional; The font size of the plot title.
+            colorbar_fontsize: Optional; The font size for the colorbar labels.
+            dataset_list: Optional; A list of datasets to filter or match the metric
+                data against before plotting. Used to identify the appropriate
+                column in the DataFrame.
+
+        Raises:
+            ValueError: If no data is loaded in the internal DataFrame object.
+            ValueError: If the specified metric is not supported or available
+                in the list of predefined metric keys.
+            ValueError: If no matching column is found for the specified metric in the
+                DataFrame, or if the dataset list and metric name do not match a
+                valid column.
+        """
+        if self.df is None:
+            raise ValueError(
+                "No data loaded. Please load a NetCDF file and convert it into a DataFrame first.")
+
+        if metric not in metric_value_ranges.keys():
+            raise ValueError(
+                f"Metric '{metric}' is not supported. Please choose from the following metrics: {metric_value_ranges.keys()}")
+        column_name = select_column_by_all_keywords(self.df, dataset_list, metric)
+        if column_name is None:
+            raise ValueError(
+                f"Column '{metric}' does not exist in the DataFrame."
+                f"Please check the dataset list and the metric name."
+            )
+
+        custom_mapplot(
+            df=self.df,
+            column_name=column_name,
+            ref_short=ref_dataset,
+            metric=metric,
+            plot_extent=extent,
+            colormap=colormap,
+            value_range=value_range,
+            label=colorbar_label,
+            title=title,
+            title_fontsize=title_fontsize,
+            label_fontsize=colorbar_fontsize,
+            output_dir=output_dir,
+        )
+
+
+
+
+
+
+
+
+def custom_mapplot(
+    df: pd.DataFrame,
+    column_name: str,
+    ref_short: str,
+    metric: str,
+    scl_short: Optional[str] = None,
+    ref_grid_stepsize: Optional[float] = None,
+    plot_extent: Optional[Tuple[float, float, float, float]] = None,
+    colormap: Optional[str] = None,
+    projection: Optional[ccrs.Projection] = None,
+    add_cbar: Optional[bool] = True,
+    label: Optional[str] = None,
+    figsize: Optional[Tuple[float, float]] = globals.map_figsize,
+    dpi: Optional[int] = globals.dpi_min,
+    diff_map: Optional[bool] = False,
+    value_range: Optional[Tuple[float, float]] = None,
+    output_dir: Optional[str] = None,
+    title: Optional[str] = None,
+    label_fontsize: Optional[int] = None,
+    title_fontsize: Optional[int] = None,
+    **style_kwargs: Dict):
+    """
+        Create an overview map from df using values as color. Plots a scatterplot for ISMN and an image plot for other
+        input values.
+
+        Parameters
+        ----------
+        df : pandas.DataFrame
+            input dataframe with lat, lon and values
+        metric : str
+            name of the metric for the plot
+        ref_short : str
+                short_name of the reference dataset (read from netCDF file)
+        scl_short : str, default is None
+            short_name of the scaling dataset (read from netCDF file).
+            None if no scaling method is selected in validation.
+        ref_grid_stepsize : float or None, optional (None by default)
+                angular grid stepsize, needed only when ref_is_angular == False,
+        plot_extent : tuple or None
+                (x_min, x_max, y_min, y_max) in Data coordinates. The default is None.
+        colormap :  Colormap, optional
+                colormap to be used.
+                If None, defaults to globals._colormaps.
+        projection :  cartopy.crs, optional
+                Projection to be used. If none, defaults to globals.map_projection.
+                The default is None.
+        add_cbar : bool, optional
+                Add a colorbar. The default is True.
+        label : str, optional
+            Label of the y-axis, describing the metric. If None, a label is autogenerated from metadata.
+            The default is None.
+        figsize : tuple, optional
+            Figure size in inches. The default is globals.map_figsize.
+        dpi : int, optional
+            Resolution for raster graphic output. The default is globals.dpi.
+        diff_map : bool, default is False
+            if True, a difference colormap is created
+        value_range : tuple, optional
+            Value range for the plot. If None, the range is determined from the metric_value_ranges dictionary.
+        title : str, optional
+            Title of the plot. The default is None.
+        title_fontsize : int, optional
+            Font size for the title.
+        label_fontsize : int, optional
+            Label font size.
+        **style_kwargs :
+            Keyword arguments for plotter.style_map().
+
+        Returns
+        -------
+        fig : matplotlib.figure.Figure
+            the boxplot
+        ax : matplotlib.axes.Axes
+        """
+    if not colormap:
+        try:
+            cmap = globals._colormaps[metric]
+        except:
+            cmap = globals._colormaps[metric.split('_')[0] if '_' in metric else metric]
+    else:
+        cmap = colormap
+    if value_range is None:
+        v_min, v_max = metric_value_ranges[metric]
+    else:
+        v_min, v_max = value_range
+    # everything changes if the plot is a difference map
+    if diff_map:
+        cmap = globals._diff_colormaps[metric.split('_')[0] if '_' in metric else metric]
+
+    if metric == 'status':
+        df = _replace_status_values(df[column_name])
+        labs = list(globals.status.values())
+        cls = globals.get_status_colors().colors
+        vals = sorted(list(set(df.values)))
+        add_cbar = False
+
+    # No need to mask ranged in the comparison plots
+    else:
+        # mask values outside range (e.g. for negative STDerr from TCA)
+        if metric.split('_')[0] in globals._metric_mask_range.keys():
+            mask_under, mask_over = globals._metric_mask_range[
+                metric.split('_')[0]]  # get values from scratch to disregard quantiles
+            cmap = copy.copy(cmap)
+            if mask_under is not None:
+                v_min = mask_under
+                cmap.set_under("red")
+            if mask_over is not None:
+                v_max = mask_over
+                cmap.set_over("red")
+
+    # initialize plot
+    fig, ax, cax = init_plot(figsize, dpi, add_cbar, projection)
     ax.coastlines()
     ax.add_feature(cfeature.BORDERS, linestyle=":")
-    ax.add_feature(cfeature.LAND, facecolor="white", edgecolor="black")
-    ax.add_feature(cfeature.OCEAN, facecolor="white")
-    ax.gridlines(draw_labels=True)
+    ax.add_feature(cfeature.LAND, facecolor="lightgray", edgecolor="black")
+    ax.add_feature(cfeature.OCEAN, facecolor="lightblue")
+    # scatter point or mapplot
+    if ref_short in globals.scattered_datasets:  # scatter
+        if not plot_extent:
+            plot_extent = get_plot_extent(df)
 
-    metric = next(
-    (key for key in metric_value_ranges.keys() if column_name.startswith(key)),
-    None)
-    if value_range == None:
-        v_min = metric_value_ranges[metric][0]
-        v_max = metric_value_ranges[metric][1]
-    else:
-        v_min = value_range[0]
-        v_max = value_range[1]
-    # Plot data
-    scatter = ax.scatter(
-        df['lon'], df['lat'],
-        c=df[column_name],  # Color based on column values
-        cmap=colormap if colormap else 'coolwarm',  # Default colormap
-        s=40,  # Marker size
-        edgecolor='black',
-        transform=ccrs.PlateCarree(),  # Ensures correct projection
-        vmin=v_min,
-        vmax=v_max,
-    )
+        markersize = globals.markersize**2
+        lat, lon, gpi = globals.index_names
+        im = ax.scatter(df.index.get_level_values(lon),
+                        df.index.get_level_values(lat),
+                        c=df[column_name],
+                        cmap=cmap,
+                        s=markersize,
+                        vmin=v_min,
+                        vmax=v_max,
+                        edgecolors='black',
+                        linewidths=0.1,
+                        zorder=2,
+                        transform=globals.data_crs)
+        if metric == 'status':
+            ax.legend(handles=[
+                Patch(facecolor=cls[x], label=labs[x])
+                for x in range(len(globals.status)) if (x - 1) in vals
+            ],
+                      loc='lower center',
+                      ncol=4)
 
-    # Set map extent
-    ax.set_extent(extent, crs=ccrs.PlateCarree())
+    else:  # mapplot
+        if not plot_extent:
+            if metric == 'status':
+                plot_extent = get_plot_extent(df,
+                                              grid_stepsize=ref_grid_stepsize,
+                                              grid=True)
+            else:
+                plot_extent = get_plot_extent(df[column_name],
+                                              grid_stepsize=ref_grid_stepsize,
+                                              grid=True)
+            # plot_extent = calculate_padded_extent(df)
+        if isinstance(ref_grid_stepsize, np.ndarray):
+            ref_grid_stepsize = ref_grid_stepsize[0]
+        if metric == 'status':
+            zz, zz_extent, origin = geotraj_to_geo2d(
+                df, grid_stepsize=ref_grid_stepsize)  # prep values
+        else:
+            zz, zz_extent, origin = geotraj_to_geo2d(
+                df[column_name],
+                grid_stepsize=ref_grid_stepsize)  # prep values
+        im = ax.imshow(zz,
+                       cmap=cmap,
+                       vmin=v_min,
+                       vmax=v_max,
+                       interpolation='nearest',
+                       origin=origin,
+                       extent=zz_extent,
+                       transform=globals.data_crs,
+                       zorder=2)
 
-    # Add colorbar
-    cbar = plt.colorbar(scatter, orientation='horizontal', pad=0.05,
-                        shrink=0.8, aspect=30)
-    cbar.ax.tick_params(labelsize=12)  # Font size for tick labels
-    cbar.set_label(column_name)
+        if metric == 'status':
+            ax.legend(handles=[
+                Patch(facecolor=cls[x], label=labs[x])
+                for x in range(len(globals.status)) if (x - 1) in vals
+            ],
+                      loc='lower center',
+                      ncol=4)
 
-    # Title and Layout
-    ax.set_title(f"Static Map Plot of {column_name}", fontsize=16)
-    plt.tight_layout()
+    if add_cbar:  # colorbar
+        try:
+            _make_cbar(fig,
+                       im,
+                       cax,
+                       ref_short,
+                       metric,
+                       label=label,
+                       diff_map=diff_map,
+                       scl_short=scl_short)
+        except:
+            _make_cbar(fig,
+                       im,
+                       cax,
+                       ref_short,
+                       metric.split('_')[0],
+                       label=label,
+                       diff_map=diff_map,
+                       scl_short=scl_short)
+    style_map(ax, plot_extent, **style_kwargs)
 
-    # Save and display
-    plt.savefig(output_dir + f"/{column_name}_static_map.png", dpi=300)
-    plt.show()
+    if title is not None and title_fontsize is not None:
+        ax.set_title(title, fontsize=title_fontsize)
+    elif title is not None:
+        ax.set_title(title)
 
 
-def map_plot(df, column_name: str, output_dir: str,
-             colormap: Optional[str] = None,
-             value_range: Optional[Tuple[float, float]] = None,
-             plotsize: Optional[Tuple[float, float]] = (16, 10)):
-    """
-    High-level function to plot a static map with data from a specific column
-    and Cartopy features.
+    if label_fontsize is not None:
+        ax.tick_params(labelsize=label_fontsize)
 
-    Parameters:
-    - df: pd.DataFrame, the DataFrame containing the data.
-    - column_name: str, the name of the column to process and plot.
-    - output_dir: str, the directory to save the output.
-    - colormap: Optional[str], the colormap to use for the plot.
-    - value_range: Optional[Tuple[float, float]], range of values for color mapping.
-    - plotsize: Optional[Tuple[float, float]], size of the plot (default: (16, 10)).
-    """
-    # Step 1: Validate and Prepare Data
-    data, label = validate_and_subset_data(df, column_name)
-
-    # Step 2: Calculate Map Extent with Padding
-    extent = calculate_padded_extent(data)
-
-    # Step 3: Plot the Static Map
-    plot_static_map(data, label, colormap, output_dir, plotsize, extent=extent,
-                    value_range=value_range, metric=column_name)
+    plt.savefig(f"{output_dir}/{column_name}_map.png", dpi=300)
+    return fig, ax
 
 
 
