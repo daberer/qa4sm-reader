@@ -242,10 +242,12 @@ class CustomPlotObject:
             raise ValueError(
                 f"Metric '{metric}' is not supported. Please choose from the following metrics present in your dataset: {valid_metrics_in_dataset}")
         # Check datasets
-        datasets_in_df = [s1 for s1 in list(globals._dataset_pretty_names.keys()) if any(s1 in s2 for s2 in list(self.df.columns))]
+        dataset_pattern = r'(?<=\d-)(.*?)(?=\.)'
+        datasets_in_df = re.findall(dataset_pattern, self.nc_file_path)
         if not all(s1 in dataset_list for s1 in datasets_in_df):
             raise ValueError(
-                f"Dataset list does not match any column in the DataFrame. Please select one of the following datasets: {datasets_in_df}")
+                f"Dataset list does not match any column in the DataFrame. Please select one of the following datasets: {datasets_in_df}"
+                f"Select at least two datasets to compare the metrics unless you are plotting a triple collocation metric (snr, err_std, beta).")
         column_name = select_column_by_all_keywords(self.df, dataset_list, metric, datasets_in_df)
         if column_name is None:
             raise ValueError(
