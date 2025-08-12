@@ -180,7 +180,8 @@ class CustomPlotObject:
         valid_metrics = [s1 for s1 in
                                     list(metric_value_ranges.keys()) if any(
                 s1 in s2 for s2 in list(self.df.columns))]
-        valid_datasets = [s1 for s1 in list(globals._dataset_pretty_names.keys()) if any(s1 in s2 for s2 in list(self.df.columns))]
+        dataset_pattern = r'(?<=\d-)(.*?)(?=\.)'
+        valid_datasets = re.findall(dataset_pattern, self.nc_file_path)
         print('The following metrics and datasets are available for this dataset:')
         print("Valid metrics: {}".format(valid_metrics))
         print("Valid datasets: {}".format(valid_datasets))
