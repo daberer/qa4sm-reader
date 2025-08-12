@@ -244,7 +244,7 @@ class CustomPlotObject:
         # Check datasets
         dataset_pattern = r'(?<=\d-)(.*?)(?=\.)'
         datasets_in_df = re.findall(dataset_pattern, self.nc_file_path)
-        if not all(s1 in dataset_list for s1 in datasets_in_df):
+        if not all(s1 in datasets_in_df for s1 in dataset_list):
             raise ValueError(
                 f"Dataset list does not match any column in the DataFrame. Please select one of the following datasets: {datasets_in_df}"
                 f" Select at least two datasets unless you are plotting a triple collocation metric (snr, err_std, beta).")
