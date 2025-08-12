@@ -247,7 +247,7 @@ class CustomPlotObject:
         if not all(s1 in dataset_list for s1 in datasets_in_df):
             raise ValueError(
                 f"Dataset list does not match any column in the DataFrame. Please select one of the following datasets: {datasets_in_df}"
-                f"Select at least two datasets to compare the metrics unless you are plotting a triple collocation metric (snr, err_std, beta).")
+                f" Select at least two datasets unless you are plotting a triple collocation metric (snr, err_std, beta).")
         column_name = select_column_by_all_keywords(self.df, dataset_list, metric, datasets_in_df)
         if column_name is None:
             raise ValueError(
