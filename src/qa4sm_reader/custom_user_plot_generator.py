@@ -1,5 +1,5 @@
-from typing import Optional, Tuple, Dict
-from qa4sm_reader.plotting_methods import (get_value_range, _replace_status_values, init_plot, get_plot_extent, Patch, geotraj_to_geo2d, _make_cbar, style_map)
+from typing import Optional, Tuple, Dict, Literal
+from qa4sm_reader.plotting_methods import (_replace_status_values, init_plot, get_plot_extent, Patch, geotraj_to_geo2d, _make_cbar, style_map)
 import copy
 from qa4sm_reader import globals
 import pandas as pd
@@ -64,7 +64,7 @@ metric_value_ranges = {  # from /qa4sm/validator/validation/graphics.py
 }
 
 
-def select_column_by_all_keywords(dataframe: pd.DataFrame, keywords: list, metric: str) -> str:
+def select_column_by_all_keywords(dataframe: pd.DataFrame, datasets: list, metric: str, datasets_in_df: list) -> str:
     """
     Select a column name from a dataframe based on the presence of all keywords.
 
@@ -76,24 +76,26 @@ def select_column_by_all_keywords(dataframe: pd.DataFrame, keywords: list, metri
     str: The name of the first column that matches all the keywords. None if no column matches.
     """
     if metric.lower().startswith("snr") or metric.lower().startswith("err_std") or metric.lower().startswith("beta"):
-        if len(keywords) > 1:
+        if len(datasets) > 1:
             raise ValueError("Only one dataset is allowed for this metric. "
                              "Please add only the dataset to the dataset list of "
-                             "which you want to get the metric value. E.g."
-                             "signal to noise ratio: ['snr'] of the dataset: 'ISMN'")
+                             "which you want to get the metric value. E.g. "
+                             "signal to noise ratio: ['snr'] of the dataset: 'ISMN'. The available datasets are: {}".format(datasets_in_df))
         for column in dataframe.columns:
             # Check if all keywords are present in the column name (case insensitive)
             if all(re.search(keyword, column, re.IGNORECASE) for keyword in
-                   keywords) and column.lower.startswith(metric.lower()):
+                   datasets) and column.lower.startswith(metric.lower()):
                 return column
-        return None
+            else:
+                raise ValueError("No column found for the metric {} and the dataset list {}.".format(metric, datasets))
     else:
         for column in dataframe.columns:
             # Check if all keywords are present in the column name (case insensitive)
             if all(re.search(keyword, column, re.IGNORECASE) for keyword in
-                   keywords) and column.lower().startswith(metric.lower()):
+                   datasets) and column.lower().startswith(metric.lower()):
                 return column
-        return None
+            else:
+                raise ValueError("No column found for the metric {} and the dataset list {}.".format(metric, datasets))
 
 
 
@@ -174,6 +176,14 @@ class CustomPlotObject:
         self.nc_file_path = nc_file_path
         self.df = xr.open_dataset(nc_file_path).to_dataframe().set_index(['lat', 'lon'])
 
+    def display_metrics_and_datasets(self):
+        valid_metrics = [s1 for s1 in
+                                    list(metric_value_ranges.keys()) if any(
+                s1 in s2 for s2 in list(self.df.columns))]
+        valid_datasets = [s1 for s1 in list(globals._dataset_pretty_names.keys()) if any(s1 in s2 for s2 in list(self.df.columns))]
+        print('The following metrics and datasets are available for this dataset:')
+        print("Valid metrics: {}".format(valid_metrics))
+        print("Valid datasets: {}".format(valid_datasets))
 
 
     def plot_map(self, metric: str, output_dir: str,
@@ -225,11 +235,17 @@ class CustomPlotObject:
         if self.df is None:
             raise ValueError(
                 "No data loaded. Please load a NetCDF file and convert it into a DataFrame first.")
-
-        if metric not in metric_value_ranges.keys():
+        # Check metrics
+        valid_metrics_in_dataset = [s1 for s1 in list(metric_value_ranges.keys()) if any(s1 in s2 for s2 in list(self.df.columns))]
+        if metric not in valid_metrics_in_dataset:
             raise ValueError(
-                f"Metric '{metric}' is not supported. Please choose from the following metrics: {metric_value_ranges.keys()}")
-        column_name = select_column_by_all_keywords(self.df, dataset_list, metric)
+                f"Metric '{metric}' is not supported. Please choose from the following metrics present in your dataset: {valid_metrics_in_dataset}")
+        # Check datasets
+        datasets_in_df = [s1 for s1 in list(globals._dataset_pretty_names.keys()) if any(s1 in s2 for s2 in list(self.df.columns))]
+        if not all(s1 in dataset_list for s1 in datasets_in_df):
+            raise ValueError(
+                f"Dataset list does not match any column in the DataFrame. Please select one of the following datasets: {datasets_in_df}")
+        column_name = select_column_by_all_keywords(self.df, dataset_list, metric, datasets_in_df)
         if column_name is None:
             raise ValueError(
                 f"Column '{metric}' does not exist in the DataFrame."
@@ -301,6 +317,8 @@ def custom_mapplot(
         colormap :  Colormap, optional
                 colormap to be used.
                 If None, defaults to globals._colormaps.
+        tc_dataset_name : str, optional
+                Specifies the name of the dataset for which the respective triple colocation metric is calculated.
         projection :  cartopy.crs, optional
                 Projection to be used. If none, defaults to globals.map_projection.
                 The default is None.
