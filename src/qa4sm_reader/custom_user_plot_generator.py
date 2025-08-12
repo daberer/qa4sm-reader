@@ -87,7 +87,7 @@ def select_column_by_all_keywords(dataframe: pd.DataFrame, datasets: list, metri
                    datasets) and column.lower.startswith(metric.lower()):
                 return column
             else:
-                raise ValueError("No column found for the metric {} and the dataset list {}.".format(metric, datasets))
+                pass
     else:
         for column in dataframe.columns:
             # Check if all keywords are present in the column name (case insensitive)
@@ -95,7 +95,7 @@ def select_column_by_all_keywords(dataframe: pd.DataFrame, datasets: list, metri
                    datasets) and column.lower().startswith(metric.lower()):
                 return column
             else:
-                raise ValueError("No column found for the metric {} and the dataset list {}.".format(metric, datasets))
+                pass
 
 
 
