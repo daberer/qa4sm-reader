@@ -206,11 +206,9 @@ class CustomPlotObject:
                  value_range: Optional[Tuple[float, float]] = None,
                  plotsize: Optional[Tuple[float, float]] = globals.map_figsize,
                  extent: Optional[Tuple[float, float, float, float]] = None,
-                 ref_dataset: str = None,
                  colorbar_label: Optional[str] = None,
                  title: Optional[str] = None,
                  title_fontsize: Optional[int] = None,
-                 colorbar_fontsize: Optional[int] = None,
                  xy_ticks_fontsize: Optional[int] = None,
                  colorbar_ticks_fontsize: Optional[int] = None,
                  dataset_list: list = None, ):
@@ -286,12 +284,14 @@ class CustomPlotObject:
                 f"triple collocation metric (snr, err_std, beta).")
         column_name = select_column_by_all_keywords(self.df, dataset_list,
                                                     metric, datasets_in_df)
+
         if column_name is None:
             raise ValueError(
                 f"Column '{metric}' does not exist in the DataFrame."
                 f"Please check the dataset list and the metric name."
             )
-
+        if globals.scattered_datasets[0] in dataset_list:
+            ref_dataset = globals.scattered_datasets[0]
         custom_mapplot(
             df=self.df,
             column_name=column_name,
@@ -303,7 +303,6 @@ class CustomPlotObject:
             label=colorbar_label,
             title=title,
             title_fontsize=title_fontsize,
-            label_fontsize=colorbar_fontsize,
             output_dir=output_dir,
             figsize=plotsize,
             xyticks_fontsize=xy_ticks_fontsize,
@@ -329,7 +328,6 @@ def custom_mapplot(
         value_range: Optional[Tuple[float, float]] = None,
         output_dir: Optional[str] = None,
         title: Optional[str] = None,
-        label_fontsize: Optional[int] = None,
         title_fontsize: Optional[int] = None,
         xyticks_fontsize: Optional[int] = None,
         colorbar_ticks_fontsize: Optional[int] = None,
