@@ -393,8 +393,8 @@ def custom_mapplot(
 
     # initialize plot
     fig, ax, cax = init_plot(figsize, dpi, add_cbar, projection)
-    if plotsize is not None:
-        fig.set_size_inches(plotsize)
+    # if plotsize is not None:
+    #     fig.set_size_inches(plotsize)
     ax.coastlines()
     ax.add_feature(cfeature.BORDERS, linestyle=":")
     ax.add_feature(cfeature.LAND, facecolor="lightgray", edgecolor="black")
