@@ -387,6 +387,7 @@ def style_map(
     add_borders=True,
     add_us_states=False,
     grid_intervals=globals.grid_intervals,
+    grid_tick_size=None,
 ):
     """Parameters to style the mapplot"""
     ax.set_extent(plot_extent, crs=globals.data_crs)
@@ -436,6 +437,9 @@ def style_map(
                 gltext.right_labels = False
                 gltext.xlocator = mticker.FixedLocator(xticks)
                 gltext.ylocator = mticker.FixedLocator(yticks)
+                if grid_tick_size is not None:
+                    gltext.xlabel_style = {'size': grid_tick_size}
+                    gltext.ylabel_style = {'size': grid_tick_size}
             except RuntimeError as e:
                 print("No tick labels plotted.\n" + str(e))
     if add_topo:

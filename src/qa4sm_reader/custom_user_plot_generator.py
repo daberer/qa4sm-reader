@@ -1,5 +1,8 @@
 from typing import Optional, Tuple, Dict, Literal
-from qa4sm_reader.plotting_methods import (_replace_status_values, init_plot, get_plot_extent, Patch, geotraj_to_geo2d, _make_cbar, style_map)
+from qa4sm_reader.plotting_methods import (_replace_status_values, init_plot,
+                                           get_plot_extent, Patch,
+                                           geotraj_to_geo2d, _make_cbar,
+                                           style_map)
 import copy
 from qa4sm_reader import globals
 import pandas as pd
@@ -10,6 +13,7 @@ import xarray as xr
 import seaborn as sns
 import re
 import numpy as np
+
 sns.set_context("notebook")
 
 status = {
@@ -28,7 +32,8 @@ metric_value_ranges = {  # from /qa4sm/validator/validation/graphics.py
     'R': [-1, 1],
     'R_ci_lower': [-1, 1],
     'R_ci_upper': [-1, 1],
-    'p_R': [0, 1],  # probability that observed correlation is statistical fluctuation
+    'p_R': [0, 1],
+    # probability that observed correlation is statistical fluctuation
     'rho': [-1, 1],
     'rho_ci_lower': [-1, 1],
     'rho_ci_upper': [-1, 1],
@@ -57,32 +62,41 @@ metric_value_ranges = {  # from /qa4sm/validator/validation/graphics.py
     'beta': [None, None],
     'beta_ci_lower': [None, None],
     'beta_ci_upper': [None, None],
-    'status': [-1, len(status)-2],
+    'status': [-1, len(status) - 2],
     'slopeR': [None, None],
     'slopeURMSD': [None, None],
     'slopeBIAS': [None, None],
 }
 
 
-def select_column_by_all_keywords(dataframe: pd.DataFrame, datasets: list, metric: str, datasets_in_df: list) -> str:
+def select_column_by_all_keywords(dataframe: pd.DataFrame, datasets: list,
+                                  metric: str, datasets_in_df: list) -> str:
     """
-    Select a column name from a dataframe based on the presence of all keywords.
+    Select a column name from a dataframe based on the presence of all
+    keywords.
 
     Parameters:
     dataframe (pd.DataFrame): The dataframe from which to select the column.
-    keywords (list): A list of keywords that must all be present in the column name.
+    keywords (list): A list of keywords that must all be present in the
+    column name.
 
     Returns:
-    str: The name of the first column that matches all the keywords. None if no column matches.
+    str: The name of the first column that matches all the keywords. None if
+    no column matches.
     """
-    if metric.lower().startswith("snr") or metric.lower().startswith("err_std") or metric.lower().startswith("beta"):
+    if metric.lower().startswith("snr") or metric.lower().startswith(
+            "err_std") or metric.lower().startswith("beta"):
         if len(datasets) > 1:
             raise ValueError("Only one dataset is allowed for this metric. "
-                             "Please add only the dataset to the dataset list of "
+                             "Please add only the dataset to the dataset "
+                             "list of "
                              "which you want to get the metric value. E.g. "
-                             "signal to noise ratio: ['snr'] of the dataset: 'ISMN'. The available datasets are: {}".format(datasets_in_df))
+                             "signal to noise ratio: ['snr'] of the dataset: "
+                             "'ISMN'. The available datasets are: {}".format(
+                datasets_in_df))
         for column in dataframe.columns:
-            # Check if all keywords are present in the column name (case insensitive)
+            # Check if all keywords are present in the column name (case
+            # insensitive)
             if all(re.search(keyword, column, re.IGNORECASE) for keyword in
                    datasets) and column.lower.startswith(metric.lower()):
                 return column
@@ -90,13 +104,13 @@ def select_column_by_all_keywords(dataframe: pd.DataFrame, datasets: list, metri
                 pass
     else:
         for column in dataframe.columns:
-            # Check if all keywords are present in the column name (case insensitive)
+            # Check if all keywords are present in the column name (case
+            # insensitive)
             if all(re.search(keyword, column, re.IGNORECASE) for keyword in
                    datasets) and column.lower().startswith(metric.lower()):
                 return column
             else:
                 pass
-
 
 
 def validate_and_subset_data(df: pd.DataFrame, column_name: str) -> Tuple[
@@ -160,12 +174,10 @@ def calculate_padded_extent(df: pd.DataFrame,
             min_lat - padding_lat, max_lat + padding_lat)
 
 
-
-
-
 class CustomPlotObject:
     """
-    A class to handle NetCDF file data and plot static maps using map_plot function.
+    A class to handle NetCDF file data and plot static maps using map_plot
+    function.
 
     Attributes:
     - nc_file_path (str): Path to the NetCDF file.
@@ -174,18 +186,20 @@ class CustomPlotObject:
 
     def __init__(self, nc_file_path: str):
         self.nc_file_path = nc_file_path
-        self.df = xr.open_dataset(nc_file_path).to_dataframe().set_index(['lat', 'lon'])
+        self.df = xr.open_dataset(nc_file_path).to_dataframe().set_index(
+            ['lat', 'lon'])
 
     def display_metrics_and_datasets(self):
         valid_metrics = [s1 for s1 in
-                                    list(metric_value_ranges.keys()) if any(
+                         list(metric_value_ranges.keys()) if any(
                 s1 in s2 for s2 in list(self.df.columns))]
         dataset_pattern = r'(?<=\d-)(.*?)(?=\.)'
         valid_datasets = re.findall(dataset_pattern, self.nc_file_path)
-        print('The following metrics and datasets are available for this dataset:')
+        print(
+            'The following metrics and datasets are available for this '
+            'dataset:')
         print("Valid metrics: {}".format(valid_metrics))
         print("Valid datasets: {}".format(valid_datasets))
-
 
     def plot_map(self, metric: str, output_dir: str,
                  colormap: Optional[str] = None,
@@ -199,11 +213,14 @@ class CustomPlotObject:
                  colorbar_fontsize: Optional[int] = None,
                  xy_ticks_fontsize: Optional[int] = None,
                  colorbar_ticks_fontsize: Optional[int] = None,
-                 dataset_list: list = None,):
+                 dataset_list: list = None, ):
         """
-        Generates a map plot for a specified metric and saves it to the specified
-        output directory. The function uses the custom_mapplot function for plotting
-        and performs a series of checks and validations on the input parameters before
+        Generates a map plot for a specified metric and saves it to the
+        specified
+        output directory. The function uses the custom_mapplot function for
+        plotting
+        and performs a series of checks and validations on the input
+        parameters before
         proceeding.
 
         Args:
@@ -211,19 +228,26 @@ class CustomPlotObject:
                 valid column in the DataFrame.
             output_dir: The directory where the output plot will be saved.
             colormap: Optional; The name of the colormap to use for the plot.
-            value_range: Optional; A tuple specifying the minimum and maximum range
+            value_range: Optional; A tuple specifying the minimum and
+            maximum range
                 of values for the metric to be displayed in the plot.
-            plotsize: Optional; A tuple specifying the size of the output plot in inches.
-            extent: Optional; A tuple specifying the geographical extent of the map.
-                Must be in the format (min_longitude, max_longitude, min_latitude,
+            plotsize: Optional; A tuple specifying the size of the output
+            plot in inches.
+            extent: Optional; A tuple specifying the geographical extent of
+            the map.
+                Must be in the format (min_longitude, max_longitude,
+                min_latitude,
                 max_latitude).
-            ref_dataset: Optional; The reference dataset to use for comparison or
+            ref_dataset: Optional; The reference dataset to use for
+            comparison or
                 alignment in the map plot.
-            colorbar_label: Optional; The label to use for the colorbar in the plot.
+            colorbar_label: Optional; The label to use for the colorbar in
+            the plot.
             title: Optional; The title of the map plot.
             title_fontsize: Optional; The font size of the plot title.
             colorbar_fontsize: Optional; The font size for the colorbar labels.
-            dataset_list: Optional; A list of datasets to filter or match the metric
+            dataset_list: Optional; A list of datasets to filter or match
+            the metric
                 data against before plotting. Used to identify the appropriate
                 column in the DataFrame.
 
@@ -231,26 +255,37 @@ class CustomPlotObject:
             ValueError: If no data is loaded in the internal DataFrame object.
             ValueError: If the specified metric is not supported or available
                 in the list of predefined metric keys.
-            ValueError: If no matching column is found for the specified metric in the
-                DataFrame, or if the dataset list and metric name do not match a
+            ValueError: If no matching column is found for the specified
+            metric in the
+                DataFrame, or if the dataset list and metric name do not
+                match a
                 valid column.
         """
         if self.df is None:
             raise ValueError(
-                "No data loaded. Please load a NetCDF file and convert it into a DataFrame first.")
+                "No data loaded. Please load a NetCDF file and convert it "
+                "into a DataFrame first.")
         # Check metrics
-        valid_metrics_in_dataset = [s1 for s1 in list(metric_value_ranges.keys()) if any(s1 in s2 for s2 in list(self.df.columns))]
+        valid_metrics_in_dataset = [s1 for s1 in
+                                    list(metric_value_ranges.keys()) if any(
+                s1 in s2 for s2 in list(self.df.columns))]
         if metric not in valid_metrics_in_dataset:
             raise ValueError(
-                f"Metric '{metric}' is not supported. Please choose from the following metrics present in your dataset: {valid_metrics_in_dataset}")
+                f"Metric '{metric}' is not supported. Please choose from the "
+                f"following metrics present in your dataset: "
+                f"{valid_metrics_in_dataset}")
         # Check datasets
         dataset_pattern = r'(?<=\d-)(.*?)(?=\.)'
         datasets_in_df = re.findall(dataset_pattern, self.nc_file_path)
         if not all(s1 in datasets_in_df for s1 in dataset_list):
             raise ValueError(
-                f"Dataset list does not match any column in the DataFrame. Please select one of the following datasets: {datasets_in_df}"
-                f" Select at least two datasets unless you are plotting a triple collocation metric (snr, err_std, beta).")
-        column_name = select_column_by_all_keywords(self.df, dataset_list, metric, datasets_in_df)
+                f"Dataset list does not match any column in the DataFrame. "
+                f"Please select one of the following datasets: "
+                f"{datasets_in_df}"
+                f" Select at least two datasets unless you are plotting a "
+                f"triple collocation metric (snr, err_std, beta).")
+        column_name = select_column_by_all_keywords(self.df, dataset_list,
+                                                    metric, datasets_in_df)
         if column_name is None:
             raise ValueError(
                 f"Column '{metric}' does not exist in the DataFrame."
@@ -276,37 +311,32 @@ class CustomPlotObject:
         )
 
 
-
-
-
-
-
-
 def custom_mapplot(
-    df: pd.DataFrame,
-    column_name: str,
-    ref_short: str,
-    metric: str,
-    scl_short: Optional[str] = None,
-    ref_grid_stepsize: Optional[float] = None,
-    plot_extent: Optional[Tuple[float, float, float, float]] = None,
-    colormap: Optional[str] = None,
-    projection: Optional[ccrs.Projection] = None,
-    add_cbar: Optional[bool] = True,
-    label: Optional[str] = None,
-    figsize: Optional[Tuple[float, float]] = globals.map_figsize,
-    dpi: Optional[int] = globals.dpi_min,
-    diff_map: Optional[bool] = False,
-    value_range: Optional[Tuple[float, float]] = None,
-    output_dir: Optional[str] = None,
-    title: Optional[str] = None,
-    label_fontsize: Optional[int] = None,
-    title_fontsize: Optional[int] = None,
-    xyticks_fontsize: Optional[int] = None,
-    colorbar_ticks_fontsize: Optional[int] = None,
-    **style_kwargs: Dict):
+        df: pd.DataFrame,
+        column_name: str,
+        ref_short: str,
+        metric: str,
+        scl_short: Optional[str] = None,
+        ref_grid_stepsize: Optional[float] = None,
+        plot_extent: Optional[Tuple[float, float, float, float]] = None,
+        colormap: Optional[str] = None,
+        projection: Optional[ccrs.Projection] = None,
+        add_cbar: Optional[bool] = True,
+        label: Optional[str] = None,
+        figsize: Optional[Tuple[float, float]] = globals.map_figsize,
+        dpi: Optional[int] = globals.dpi_min,
+        diff_map: Optional[bool] = False,
+        value_range: Optional[Tuple[float, float]] = None,
+        output_dir: Optional[str] = None,
+        title: Optional[str] = None,
+        label_fontsize: Optional[int] = None,
+        title_fontsize: Optional[int] = None,
+        xyticks_fontsize: Optional[int] = None,
+        colorbar_ticks_fontsize: Optional[int] = None,
+        **style_kwargs: Dict):
     """
-        Create an overview map from df using values as color. Plots a scatterplot for ISMN and an image plot for other
+        Create an overview map from df using values as color. Plots a
+        scatterplot for ISMN and an image plot for other
         input values.
 
         Parameters
@@ -321,21 +351,26 @@ def custom_mapplot(
             short_name of the scaling dataset (read from netCDF file).
             None if no scaling method is selected in validation.
         ref_grid_stepsize : float or None, optional (None by default)
-                angular grid stepsize, needed only when ref_is_angular == False,
+                angular grid stepsize, needed only when ref_is_angular ==
+                False,
         plot_extent : tuple or None
-                (x_min, x_max, y_min, y_max) in Data coordinates. The default is None.
+                (x_min, x_max, y_min, y_max) in Data coordinates. The
+                default is None.
         colormap :  Colormap, optional
                 colormap to be used.
                 If None, defaults to globals._colormaps.
         tc_dataset_name : str, optional
-                Specifies the name of the dataset for which the respective triple colocation metric is calculated.
+                Specifies the name of the dataset for which the respective
+                triple colocation metric is calculated.
         projection :  cartopy.crs, optional
-                Projection to be used. If none, defaults to globals.map_projection.
+                Projection to be used. If none, defaults to
+                globals.map_projection.
                 The default is None.
         add_cbar : bool, optional
                 Add a colorbar. The default is True.
         label : str, optional
-            Label of the y-axis, describing the metric. If None, a label is autogenerated from metadata.
+            Label of the y-axis, describing the metric. If None, a label is
+            autogenerated from metadata.
             The default is None.
         figsize : tuple, optional
             Figure size in inches. The default is globals.map_figsize.
@@ -344,7 +379,8 @@ def custom_mapplot(
         diff_map : bool, default is False
             if True, a difference colormap is created
         value_range : tuple, optional
-            Value range for the plot. If None, the range is determined from the metric_value_ranges dictionary.
+            Value range for the plot. If None, the range is determined from
+            the metric_value_ranges dictionary.
         title : str, optional
             Title of the plot. The default is None.
         title_fontsize : int, optional
@@ -364,7 +400,8 @@ def custom_mapplot(
         try:
             cmap = globals._colormaps[metric]
         except:
-            cmap = globals._colormaps[metric.split('_')[0] if '_' in metric else metric]
+            cmap = globals._colormaps[
+                metric.split('_')[0] if '_' in metric else metric]
     else:
         cmap = colormap
     if value_range is None:
@@ -373,7 +410,8 @@ def custom_mapplot(
         v_min, v_max = value_range
     # everything changes if the plot is a difference map
     if diff_map:
-        cmap = globals._diff_colormaps[metric.split('_')[0] if '_' in metric else metric]
+        cmap = globals._diff_colormaps[
+            metric.split('_')[0] if '_' in metric else metric]
 
     if metric == 'status':
         df = _replace_status_values(df[column_name])
@@ -387,7 +425,8 @@ def custom_mapplot(
         # mask values outside range (e.g. for negative STDerr from TCA)
         if metric.split('_')[0] in globals._metric_mask_range.keys():
             mask_under, mask_over = globals._metric_mask_range[
-                metric.split('_')[0]]  # get values from scratch to disregard quantiles
+                metric.split('_')[
+                    0]]  # get values from scratch to disregard quantiles
             cmap = copy.copy(cmap)
             if mask_under is not None:
                 v_min = mask_under
@@ -398,9 +437,6 @@ def custom_mapplot(
 
     # initialize plot
     fig, ax, cax = init_plot(figsize, dpi, add_cbar, projection)
-    if xyticks_fontsize:
-        ax.tick_params(axis='both',  labelsize=xyticks_fontsize)
-
     ax.coastlines()
     ax.add_feature(cfeature.BORDERS, linestyle=":")
     ax.add_feature(cfeature.LAND, facecolor="lightgray", edgecolor="black")
@@ -410,7 +446,7 @@ def custom_mapplot(
         if not plot_extent:
             plot_extent = get_plot_extent(df)
 
-        markersize = globals.markersize**2
+        markersize = globals.markersize ** 2
         lat, lon, gpi = globals.index_names
         im = ax.scatter(df.index.get_level_values(lon),
                         df.index.get_level_values(lat),
@@ -428,8 +464,8 @@ def custom_mapplot(
                 Patch(facecolor=cls[x], label=labs[x])
                 for x in range(len(globals.status)) if (x - 1) in vals
             ],
-                      loc='lower center',
-                      ncol=4)
+                loc='lower center',
+                ncol=4)
 
     else:  # mapplot
         if not plot_extent:
@@ -460,14 +496,13 @@ def custom_mapplot(
                        extent=zz_extent,
                        transform=globals.data_crs,
                        zorder=2)
-
         if metric == 'status':
             ax.legend(handles=[
                 Patch(facecolor=cls[x], label=labs[x])
                 for x in range(len(globals.status)) if (x - 1) in vals
             ],
-                      loc='lower center',
-                      ncol=4)
+                loc='lower center',
+                ncol=4)
 
     if add_cbar:  # colorbar
         try:
@@ -490,25 +525,11 @@ def custom_mapplot(
                        scl_short=scl_short)
         if colorbar_ticks_fontsize:
             cax.tick_params(labelsize=colorbar_ticks_fontsize)
-    style_map(ax, plot_extent, **style_kwargs)
-
+    style_map(ax, plot_extent, grid_tick_size=xyticks_fontsize, **style_kwargs)
     if title is not None and title_fontsize is not None:
         ax.set_title(title, fontsize=title_fontsize)
     elif title is not None:
         ax.set_title(title)
 
-
-    if label_fontsize is not None:
-        ax.tick_params(labelsize=label_fontsize)
-
     plt.savefig(f"{output_dir}/{column_name}_map.png", dpi=300)
     return fig, ax
-
-
-
-
-
-
-
-
-
