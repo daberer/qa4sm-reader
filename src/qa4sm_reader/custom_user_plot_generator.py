@@ -190,13 +190,15 @@ class CustomPlotObject:
     def plot_map(self, metric: str, output_dir: str,
                  colormap: Optional[str] = None,
                  value_range: Optional[Tuple[float, float]] = None,
-                 plotsize: Optional[Tuple[float, float]] = (16, 10),
+                 plotsize: Optional[Tuple[float, float]] = globals.map_figsize,
                  extent: Optional[Tuple[float, float, float, float]] = None,
                  ref_dataset: str = None,
                  colorbar_label: Optional[str] = None,
                  title: Optional[str] = None,
                  title_fontsize: Optional[int] = None,
                  colorbar_fontsize: Optional[int] = None,
+                 xy_ticks_fontsize: Optional[int] = None,
+                 colorbar_ticks_fontsize: Optional[int] = None,
                  dataset_list: list = None,):
         """
         Generates a map plot for a specified metric and saves it to the specified
@@ -268,7 +270,9 @@ class CustomPlotObject:
             title_fontsize=title_fontsize,
             label_fontsize=colorbar_fontsize,
             output_dir=output_dir,
-            plotsize=plotsize,
+            figsize=plotsize,
+            xyticks_fontsize=xy_ticks_fontsize,
+            colorbar_ticks_fontsize=colorbar_ticks_fontsize,
         )
 
 
@@ -298,7 +302,8 @@ def custom_mapplot(
     title: Optional[str] = None,
     label_fontsize: Optional[int] = None,
     title_fontsize: Optional[int] = None,
-    plotsize: Optional[Tuple[float, float]] = None,
+    xyticks_fontsize: Optional[int] = None,
+    colorbar_ticks_fontsize: Optional[int] = None,
     **style_kwargs: Dict):
     """
         Create an overview map from df using values as color. Plots a scatterplot for ISMN and an image plot for other
@@ -393,8 +398,9 @@ def custom_mapplot(
 
     # initialize plot
     fig, ax, cax = init_plot(figsize, dpi, add_cbar, projection)
-    if plotsize is not None:
-        fig.set_size_inches(plotsize)
+    if xyticks_fontsize:
+        ax.tick_params(axis='both',  labelsize=xyticks_fontsize)
+
     ax.coastlines()
     ax.add_feature(cfeature.BORDERS, linestyle=":")
     ax.add_feature(cfeature.LAND, facecolor="lightgray", edgecolor="black")
@@ -482,6 +488,8 @@ def custom_mapplot(
                        label=label,
                        diff_map=diff_map,
                        scl_short=scl_short)
+        if colorbar_ticks_fontsize:
+            cax.tick_params(labelsize=colorbar_ticks_fontsize)
     style_map(ax, plot_extent, **style_kwargs)
 
     if title is not None and title_fontsize is not None:
