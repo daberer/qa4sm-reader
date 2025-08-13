@@ -268,6 +268,7 @@ class CustomPlotObject:
             title_fontsize=title_fontsize,
             label_fontsize=colorbar_fontsize,
             output_dir=output_dir,
+            plotsize=plotsize,
         )
 
 
@@ -297,6 +298,7 @@ def custom_mapplot(
     title: Optional[str] = None,
     label_fontsize: Optional[int] = None,
     title_fontsize: Optional[int] = None,
+    plotsize: Optional[Tuple[float, float]] = None,
     **style_kwargs: Dict):
     """
         Create an overview map from df using values as color. Plots a scatterplot for ISMN and an image plot for other
@@ -391,6 +393,8 @@ def custom_mapplot(
 
     # initialize plot
     fig, ax, cax = init_plot(figsize, dpi, add_cbar, projection)
+    if plotsize is not None:
+        fig.set_size_inches(plotsize)
     ax.coastlines()
     ax.add_feature(cfeature.BORDERS, linestyle=":")
     ax.add_feature(cfeature.LAND, facecolor="lightgray", edgecolor="black")
