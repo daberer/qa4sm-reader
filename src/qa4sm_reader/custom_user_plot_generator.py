@@ -289,6 +289,8 @@ class CustomPlotObject:
             )
         if globals.scattered_datasets[0] in datasets_in_df:
             ref_dataset = globals.scattered_datasets[0]
+        else:
+            ref_dataset = None
 
         custom_mapplot(
             df=self.df,
