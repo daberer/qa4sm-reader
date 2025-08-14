@@ -1,15 +1,9 @@
 import pytest
-import pandas as pd
-import numpy as np
 import tempfile
 import os
-import xarray as xr
-
 
 from qa4sm_reader.custom_user_plot_generator import (
-    validate_and_subset_data,
-    calculate_padded_extent,
-    CustomPlotObject,
+    CustomPlotObject
 )
 
 @pytest.fixture
