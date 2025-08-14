@@ -114,75 +114,13 @@ def select_column_by_all_keywords(dataframe: pd.DataFrame, datasets: list,
                 pass
 
 
-def validate_and_subset_data(df: pd.DataFrame, column_name: str) -> Tuple[
-    pd.DataFrame, str]:
-    """
-    - column_name: str, column name to filter and subset data
-
-    Parameters:
-    - df: pd.DataFrame containing the data
-    - metric: str, metric to filter and subset data
-
-    Returns:
-    - Tuple with filtered DataFrame and the column name to use as a label
-    """
-    required_columns = {'lat', 'lon'}
-    if not required_columns.issubset(df.columns):
-        raise ValueError(f"DataFrame must contain columns: {required_columns}")
-
-    metric_data = None
-    label = None
-
-    # Filter DataFrame for relevant metric column
-    # Subset DataFrame for the specified column
-    if column_name not in df.columns:
-        raise ValueError(f"Column '{column_name}' not found in the DataFrame.")
-    metric_data = df[["lat", "lon", column_name]].dropna()
-    label = column_name
-
-    if metric_data is None or metric_data.empty:
-        raise ValueError(
-            f"No data found for column '{column_name}' in the DataFrame.")
-
-    # Define color for the metric values
-    metric_data['color'] = metric_data[column_name].apply(
-        lambda x: 'negative' if x < 0 else 'positive')
-    return metric_data, label
-
-
-def calculate_padded_extent(df: pd.DataFrame,
-                            padding_fraction: float = 0.05) -> Tuple[
-    float, float, float, float]:
-    """
-    Calculate the min/max latitude and longitude boundaries with padding.
-
-    Parameters:
-    - df: pd.DataFrame containing 'lat' and 'lon' columns.
-    - padding_fraction: float, the fraction of range to use for padding.
-
-    Returns:
-    - Tuple: (min_lon_padded, max_lon_padded, min_lat_padded, max_lat_padded)
-    """
-    min_lon, max_lon = df["lon"].min(), df["lon"].max()
-    min_lat, max_lat = df["lat"].min(), df["lat"].max()
-
-    # Calculate padding
-    padding_lat = (max_lat - min_lat) * padding_fraction
-    padding_lon = (max_lon - min_lon) * padding_fraction
-
-    # Apply padding
-    return (min_lon - padding_lon, max_lon + padding_lon,
-            min_lat - padding_lat, max_lat + padding_lat)
-
-
 class CustomPlotObject:
     """
-    A class to handle NetCDF file data and plot static maps using map_plot
+    A class to handle NetCDF file data and plot static maps using custom_map_plot
     function.
 
     Attributes:
     - nc_file_path (str): Path to the NetCDF file.
-    - df (pd.DataFrame): DataFrame created from the NetCDF file.
     """
 
     def __init__(self, nc_file_path: str):
@@ -191,6 +129,22 @@ class CustomPlotObject:
             ['lat', 'lon'])
 
     def display_metrics_and_datasets(self):
+        """
+        Displays available metrics and datasets for the dataset present in the
+        current object.
+
+        This method identifies valid metrics by matching keys from the
+        `metric_value_ranges` dictionary to column names in the dataframe
+        available in `self.df`. It also identifies valid datasets by extracting
+        dataset patterns from the `nc_file_path` using a regular expression.
+        The results are printed to the console.
+
+        Attributes:
+            df (pd.DataFrame): Dataframe containing data with various columns
+                where metrics can potentially exist.
+            nc_file_path (str): File path of the netCDF file being used, from
+                which dataset patterns are extracted.
+        """
         valid_metrics = [s1 for s1 in
                          list(metric_value_ranges.keys()) if any(
                 s1 in s2 for s2 in list(self.df.columns))]
@@ -476,7 +430,6 @@ def custom_mapplot(
                 plot_extent = get_plot_extent(df[column_name],
                                               grid_stepsize=ref_grid_stepsize,
                                               grid=True)
-            # plot_extent = calculate_padded_extent(df)
         if isinstance(ref_grid_stepsize, np.ndarray):
             ref_grid_stepsize = ref_grid_stepsize[0]
         if metric == 'status':
