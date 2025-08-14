@@ -236,9 +236,6 @@ class CustomPlotObject:
                 Must be in the format (min_longitude, max_longitude,
                 min_latitude,
                 max_latitude).
-            ref_dataset: Optional; The reference dataset to use for
-            comparison or
-                alignment in the map plot.
             colorbar_label: Optional; The label to use for the colorbar in
             the plot.
             title: Optional; The title of the map plot.
@@ -290,8 +287,9 @@ class CustomPlotObject:
                 f"Column '{metric}' does not exist in the DataFrame."
                 f"Please check the dataset list and the metric name."
             )
-        if globals.scattered_datasets[0] in dataset_list:
+        if globals.scattered_datasets[0] in datasets_in_df:
             ref_dataset = globals.scattered_datasets[0]
+
         custom_mapplot(
             df=self.df,
             column_name=column_name,
