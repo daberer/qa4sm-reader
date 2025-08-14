@@ -94,14 +94,15 @@ def select_column_by_all_keywords(dataframe: pd.DataFrame, datasets: list,
                              "signal to noise ratio: ['snr'] of the dataset: "
                              "'ISMN'. The available datasets are: {}".format(
                 datasets_in_df))
-        for column in dataframe.columns:
-            # Check if all keywords are present in the column name (case
-            # insensitive)
-            if all(re.search(keyword, column, re.IGNORECASE) for keyword in
-                   datasets) and column.lower.startswith(metric.lower()):
-                return column
-            else:
-                pass
+        else:
+            pattern = r"^"+ metric.lower() +"_\d+-"+datasets[0].upper()
+            for column in dataframe.columns:
+                # Check if all keywords are present in the column name (case
+                # insensitive)
+                if re.search(pattern, column, re.IGNORECASE):
+                    return column
+                else:
+                    pass
     else:
         for column in dataframe.columns:
             # Check if all keywords are present in the column name (case
