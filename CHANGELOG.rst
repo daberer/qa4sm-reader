@@ -5,6 +5,9 @@ Changelog
 Unreleased changes in master branch
 ===================================
 
+Version 0.11.4
+===================================
+- Added Custom Plot Functions for Users support materials
 Version 0.11.3
 ===================================
 - Added fallback names for new CCI and C3S data
