@@ -192,8 +192,8 @@ class CustomPlotObject:
         dataset_pattern = r'(?<=\d-)(.*?)(?=\.)'
         valid_datasets = re.findall(dataset_pattern, self.nc_file_path)
         print(
-            """The following metrics and datasets are available for this dataset:
-            Datasets: """)
+            "The following metrics and datasets are available for this dataset:\n"
+            "Datasets: ")
 
         for dataset in valid_datasets:
             print("- {}".format(dataset))
