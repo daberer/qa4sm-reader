@@ -79,8 +79,9 @@ jobs:
           path: artifacts/*
       - name: Upload Coverage
         shell: bash -l {0}
+        continue-on-error: true
         run: |
-          pip install coveralls && coveralls --service=github-actions
+          pip install coveralls && coveralls --service=github-actions --no-fail
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           COVERALLS_FLAG_NAME: ${{ matrix.python-version }}
