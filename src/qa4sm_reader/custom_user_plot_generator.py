@@ -16,6 +16,7 @@ import numpy as np
 
 sns.set_context("notebook")
 
+
 status = {
     -1: 'Other error',
     0: 'Success',
@@ -27,6 +28,47 @@ status = {
     6: 'Unexpected validation error',
     7: 'Missing GPI data',
     8: 'Data reading failed'
+}
+
+metric_pretty_names = {
+    'R': 'Pearson\'s r',
+    'R_ci_lower': 'Pearson\'s r lower confidence interval',
+    'R_ci_upper': 'Pearson\'s r upper confidence interval',
+    'p_R': 'Pearson\'s r p-value',
+    'RMSD': 'Root-mean-square deviation',
+    'BIAS': 'Bias (difference of means)',
+    'BIAS_ci_lower': 'Bias (difference of means) lower confidence interval',
+    'BIAS_ci_upper': 'Bias (difference of means) upper confidence interval',
+    'n_obs': '# observations',
+    'urmsd': 'Unbiased root-mean-square deviation',
+    'urmsd_ci_lower': 'Unbiased root-mean-square deviation lower confidence interval',
+    'urmsd_ci_upper': 'Unbiased root-mean-square deviation upper confidence interval',
+    'RSS': 'Residual sum of squares',
+    'mse': 'Mean square error',
+    'mse_corr': 'Mean square error correlation',
+    'mse_bias': 'Mean square error bias',
+    'mse_var': 'Mean square error variance',
+    'snr': 'Signal-to-noise ratio',
+    'snr_ci_lower': 'Signal-to-noise ratio lower confidence interval',
+    'snr_ci_upper': 'Signal-to-noise ratio upper confidence interval',
+    'err_std': 'Error standard deviation',
+    'err_std_ci_lower': 'Error standard deviation lower confidence interval',
+    'err_std_ci_upper': 'Error standard deviation upper confidence interval',
+    'beta': 'TC scaling coefficient',
+    'beta_ci_lower': 'TC scaling coefficient lower confidence interval',
+    'beta_ci_upper': 'TC scaling coefficient upper confidence interval',
+    'rho': 'Spearman\'s ρ',
+    'rho_ci_lower': 'Spearman\'s ρ lower confidence interval',
+    'rho_ci_uppper': 'Spearman\'s ρ upper confidence interval',
+    'p_rho': 'Spearman\'s ρ p-value',
+    'tau': 'Kendall rank correlation',
+    'p_tau': 'Kendall tau p-value',
+    'status': 'Validation success status',
+    # 'tau': 'Kendall rank correlation',        # currently QA4SM is hardcoded not to calculate kendall tau
+    # 'p_tau': 'Kendall tau p-value',
+    'slopeR' : 'Theil-Sen slope of R',
+    'slopeURMSD' : 'Theil-Sen slope of urmsd',
+    'slopeBIAS' : 'Theil-Sen slope of BIAS'
 }
 metric_value_ranges = {  # from /qa4sm/validator/validation/graphics.py
     'R': [-1, 1],
@@ -146,15 +188,20 @@ class CustomPlotObject:
                 which dataset patterns are extracted.
         """
         valid_metrics = [s1 for s1 in
-                         list(metric_value_ranges.keys()) if any(
+                         list(metric_pretty_names.keys()) if any(
                 s1 in s2 for s2 in list(self.df.columns))]
         dataset_pattern = r'(?<=\d-)(.*?)(?=\.)'
         valid_datasets = re.findall(dataset_pattern, self.nc_file_path)
         print(
-            'The following metrics and datasets are available for this '
-            'dataset:')
-        print("Valid metrics: {}".format(valid_metrics))
-        print("Valid datasets: {}".format(valid_datasets))
+            "The following metrics and datasets are available for this dataset:\n"
+            "Datasets: ")
+
+        for dataset in valid_datasets:
+            print("- {}".format(dataset))
+        print(
+            """Metrics: """)
+        for metric in valid_metrics:
+            print("- "+metric+": "+metric_pretty_names[metric])
 
     def plot_map(self, metric: str, output_dir: str,
                  colormap: Optional[str] = None,
@@ -419,7 +466,6 @@ def custom_mapplot(
             ],
                 loc='lower center',
                 ncol=4)
-
     else:  # mapplot
         if not plot_extent:
             if metric == 'status':
@@ -483,5 +529,6 @@ def custom_mapplot(
     elif title is not None:
         ax.set_title(title)
 
+    plt.tight_layout()
     plt.savefig(f"{output_dir}/{column_name}_map.png", dpi=300)
     return fig, ax
