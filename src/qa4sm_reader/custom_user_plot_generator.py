@@ -16,6 +16,7 @@ import numpy as np
 
 sns.set_context("notebook")
 
+
 status = {
     -1: 'Other error',
     0: 'Success',
@@ -465,7 +466,6 @@ def custom_mapplot(
             ],
                 loc='lower center',
                 ncol=4)
-
     else:  # mapplot
         if not plot_extent:
             if metric == 'status':
@@ -529,5 +529,6 @@ def custom_mapplot(
     elif title is not None:
         ax.set_title(title)
 
+    plt.tight_layout()
     plt.savefig(f"{output_dir}/{column_name}_map.png", dpi=300)
     return fig, ax
