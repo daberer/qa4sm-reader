@@ -4,22 +4,24 @@ Changelog
 
 Unreleased changes in master branch
 ===================================
+-
 
-Version 0.12
-===================================
+Version 0.11.4
+==============
 - Added Custom Plot Functions for Users support materials
+
 Version 0.11.3
-===================================
+==============
 - Added fallback names for new CCI and C3S data
 - Pyscaffold version updated, use pyproject.toml instead of setup.cfg
 
 Version 0.11.2
-===================================
+==============
 - Update dependencies, remove environment.yml
 - Fix empty comparison plot generation in stability case
 
 Version 0.11.1
-===================================
+==============
 - ISMN metadata boxplots split by network (`PR #97 <https://github.com/awst-austria/qa4sm-reader/pull/97>`_)
 - Fix filenames of triple collocation mapplots
 - Restrict qtbase to versions <= 6.7.2
