@@ -342,7 +342,7 @@ class QA4SMPlotter:
             else:
                 box_cap = box_cap_ds
             df = values.to_frame(box_cap)
-
+            
             ci = self.img.get_cis(Var)
 
             if ci:  # could be that variable doesn't have CIs - empty list
@@ -369,6 +369,199 @@ class QA4SMPlotter:
                 continue
 
             yield df, Var, ci
+
+    def _get_legend_title(self, Var) -> str:
+        """
+        Creates a title for an existing legend from a QA4SMMetricVariable.
+
+        Parameters
+        ----------
+        Var : QA4SMMetricVariable
+            Var in the image to make the map for.
+
+        Returns
+        -------
+        legend_title : String
+            String containing the legend title
+        """
+        dataset_ref = {Var.Datasets.ref_id:f"{Var.Datasets.ref["pretty_name"]} [{Var.Datasets.ref['mu']}] (spatial reference)"}
+        dataset_others = {Var.Datasets.others_id[i]:f"{Var.Datasets.others[i]["pretty_name"]} [{Var.Datasets.others[i]['mu']}]" for i in range(len(Var.Datasets.others))}
+        legend_title = "Datasets:\n" + "\n".join(f"{k}: {v}" for k, v in (dataset_ref | dataset_others).items())
+        return legend_title
+    
+    def _append_legend_title(self, fig, ax, Var) -> tuple:
+        """
+        Appends a title to an existing legend from a QA4SMMetricVariable.
+
+        Parameters
+        ----------
+        fig : matplotlib.figure.Figure
+            The figure that contains the axes and legend.
+        ax : matplotlib.axes.Axes
+            The subplot axis containing the legend to modify.
+        Var : QA4SMMetricVariable
+            Variable object used to construct the legend title.
+
+        Returns
+        -------
+        fig, ax : tuple
+            The same figure and axis, with the legend title updated.
+        """  
+        legend = ax.get_legend()
+        legend_title = self._get_legend_title(Var)
+
+        # Change Size to same as rest of legend
+        if len(legend.legend_handles) == 0:
+            legend.set_title(legend_title, prop={'size': globals.fontsize_legend})
+        else:
+            fs = legend.get_texts()[0].get_fontsize()
+            legend.set_title(legend_title, prop={'size': fs})
+
+        legend._legend_box.align = "left"
+
+        return fig, ax
+    
+
+
+    def _smart_suptitle(self, fig, pad=globals.fontsize_title/2):
+        """
+        Compute position of Suptitle centeredd above axes.
+
+        Parameters
+        ----------
+        fig : matplotlib.figure.Figure
+            The figure object.
+        pad : float
+            Extra space (in fontsize) above the top axes title.
+        """
+        fig.canvas.draw() 
+
+        top_positions = []
+        for ax in fig.axes:
+            if ax.get_visible():
+                # get bounding box of the title in figure coordinates
+                title = ax.title
+                bbox = title.get_window_extent(renderer=fig.canvas.get_renderer())
+                bbox_fig = bbox.transformed(fig.transFigure.inverted())
+                top_positions.append(bbox_fig.y1 + title.get_fontsize()/(72*fig.get_figheight()))
+
+        if top_positions:
+            y = max(top_positions) + pad/(72*fig.get_figheight())
+            y = min(y, 0.99) # So Suptitle always in Figure
+        else:
+            y = 0.99  # fallback if no axes
+        # get center of axes or average of centers if multiple axes
+        x = np.mean([(ax.get_position().x0+ax.get_position().x1)/2 for ax in fig.get_axes()[:globals.n_col_agg]])
+
+        return x, y
+    
+    def _smart_suplabel(self, fig, axis, pad=globals.fontsize_label/2):
+        """
+        Compute position of suplabels centered according to axes.
+
+        Parameters
+        ----------
+        fig : matplotlib.figure.Figure
+            The figure object.
+        axis : str
+            Axis for which to calculate position.
+        pad : float
+            Extra space (in fontsize) above the top axes title.
+        """
+        fig.canvas.draw() 
+        if axis == "x":
+            bottom_positions = []
+            for ax in fig.axes:
+                if ax.get_visible():
+                    renderer = fig.canvas.get_renderer()
+
+                    # consider x-axis label and tick labels
+                    xlabel_bbox = ax.xaxis.label.get_window_extent(renderer=renderer)
+                    xtick_bboxes = [t.get_window_extent(renderer=renderer) for t in ax.xaxis.get_ticklabels() if t.get_text()]
+                    
+                    all_bboxes = [xlabel_bbox] + xtick_bboxes
+                    all_bboxes_fig = [b.transformed(fig.transFigure.inverted()) for b in all_bboxes]
+                    bottom_positions.append(min(b.y0 for b in all_bboxes_fig))
+
+            if bottom_positions:
+                y = min(bottom_positions) - globals.fontsize_label/(72*fig.get_figheight()) - pad/(72*fig.get_figheight())
+            else:
+                y = 0.01  # fallback
+            x = np.mean([(ax.get_position().x0+ax.get_position().x1)/2 for ax in fig.get_axes()[:globals.n_col_agg]])
+            return x, y
+        elif axis == "y":
+            left_positions = []
+            for ax in fig.axes:
+                if ax.get_visible():
+                    renderer = fig.canvas.get_renderer()
+
+                    # consider x-axis label and tick labels
+                    ylabel_bbox = ax.yaxis.label.get_window_extent(renderer=renderer)
+                    ytick_bboxes = [t.get_window_extent(renderer=renderer) for t in ax.yaxis.get_ticklabels() if t.get_text()]
+                    
+                    all_bboxes = [ylabel_bbox] + ytick_bboxes
+                    all_bboxes_fig = [b.transformed(fig.transFigure.inverted()) for b in all_bboxes]
+                    left_positions.append(min(b.x0 for b in all_bboxes_fig))
+
+            if left_positions:
+                x = min(left_positions) - globals.fontsize_label/(72*fig.get_figwidth()) - pad/(72*fig.get_figheight()) 
+            else:
+                x = 0.01  # fallback
+            y = np.mean([(ax.get_position().y0+ax.get_position().y1)/2 for ax in fig.get_axes()[::globals.n_col_agg]])
+            return x, y
+        else: #fallback
+            return 0.01, 0.01
+
+    def _get_ax_width(self, fig) -> float:
+        """Get horizontal distance of all axes in px. From left of first in row to right of last in row."""
+        left = min([ax.get_position().x0 for ax in fig.get_axes()[:1]]) # Always the first ax
+        right = max([ax.get_position().x1 for ax in fig.get_axes()])
+        ax_width_px = fig.get_figwidth()*(right-left) * fig.dpi
+
+        return ax_width_px
+    
+    def _get_ax_height(self, fig) -> float:
+        """Get vertical distance of all axes in px. From bottom of column to top of column."""
+        bottom = min([ax.get_position().y0 for ax in fig.get_axes()]) # Always the first ax
+        top = max([ax.get_position().y1 for ax in fig.get_axes()])
+        ax_height_px = fig.get_figheight()*(top-bottom) * fig.dpi
+
+        return ax_height_px
+
+    def _set_wrapped_title(self, fig, ax, title, fontsize=globals.fontsize_title,
+                           pad=globals.title_pad, use_suptitle=False):
+        """
+        Set an axes or figure suptitle that automatically wraps to fit within figure width.
+        
+        Parameters
+        ----------
+        fig : matplotlib.figure.Figure
+            The figure object.
+        ax : matplotlib.axes.Axes
+            The target axes (ignored if use_suptitle=True).
+        title : str
+            The title text.
+        fontsize : int
+            Font size of the title.
+        pad : float
+            Extra spacing from the plot, in points.
+        use_suptitle : bool, optional
+            If True, set a figure-wide suptitle instead of an axes title.
+        """
+        fig.canvas.draw()  # needed to get renderer
+
+        # width between most left point and most right point in axesin inches * dpi = pixels
+        ax_width_px = self._get_ax_width(fig)
+
+        # estimate character width (rough, depends on font)
+        wrapped = plm.wrapped_text(fig, title, ax_width_px, fontsize)
+
+        if use_suptitle:
+            x, y = self._smart_suptitle(fig)
+            fig.suptitle(wrapped, fontsize=fontsize, y=y, x=x, ha="center", va="bottom")
+        else:
+            x, y = self._smart_suptitle(fig)
+            ax.set_title(wrapped, fontsize=fontsize, pad=pad)
 
     def _boxplot_definition(self,
                             metric: str,
