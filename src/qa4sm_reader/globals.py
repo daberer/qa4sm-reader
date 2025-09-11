@@ -24,7 +24,7 @@ no_print_period = ["bulk"] # List of period names which should not be printed in
 
 dpi_min = 100  # Resolution in which plots are going to be rendered.
 dpi_max = 200
-title_pad = 12.0  # Padding below the title in points. default padding is matplotlib.rcParams['axes.titlepad'] = 6.0
+title_pad = 12  # Padding below the title in points. default padding is matplotlib.rcParams['axes.titlepad'] = 6.0
 data_crs = ccrs.PlateCarree()  # Default map projection. use one of
 legend_alpha = 0.7
 ci_alpha = 0.4
