@@ -142,7 +142,7 @@ class QA4SMComparison:
             for metric in img.metrics:
                 # hardcoded because n_obs cannot be compared. todo: exclude empty metrics (problem: the values are not loaded here)
                 if metric in glob.metric_groups['common'] or metric in [
-                        "tau", "p_tau"
+                        "tau", "p_tau", "status"
                 ]:
                     continue
                 img_metrics[metric] = glob._metric_name[metric]
@@ -333,12 +333,14 @@ class QA4SMComparison:
         ref_grid_stepsize = self.compared[0].ref_dataset_grid_stepsize
 
         ref = self._check_ref()["short_name"]
+        is_scattered = any([x.ds.attrs.get('val_is_scattered_data') == 'True' for x in self.compared])
         plm.plot_spatial_extent(polys=polys,
                                 ref_points=ref_points,
                                 overlapping=self.overlapping,
                                 intersection_extent=extent,
                                 reg_grid=(ref != "ISMN"),
-                                grid_stepsize=ref_grid_stepsize)
+                                grid_stepsize=ref_grid_stepsize,
+                                is_scattered=is_scattered)
 
     def _get_data(
         self, metric: str
@@ -628,11 +630,14 @@ class QA4SMComparison:
         cbar_label = "Difference between {} and {}".format(
             *df.columns) + f"{um}"
 
+        # point data case
+        is_scattered = any([x.ds.attrs.get('val_is_scattered_data') == 'True' for x in self.compared])
         fig, axes = plm.mapplot(df.iloc[:, 2],
                                 metric=metric,
                                 ref_short=self.ref['short_name'],
                                 diff_map=True,
-                                label=cbar_label)
+                                label=cbar_label,
+                                is_scattered=is_scattered)
         fonts = {"fontsize": 12}
         title_plot = f"Overview of the difference in {Metric.pretty_name} " \
                      f"against the reference {self.ref['pretty_title']}"
