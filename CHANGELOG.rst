@@ -6,6 +6,12 @@ Unreleased changes in master branch
 ===================================
 -
 
+Version 0.11.5
+==============
+- Update build.yml
+- Fix comparison module
+- Results with val_is_scattered_data == 'True' rendered as point data in plots
+
 Version 0.11.4
 ==============
 - Added Custom Plot Functions for Users support materials
