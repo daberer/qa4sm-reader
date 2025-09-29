@@ -6,6 +6,10 @@ Unreleased changes in master branch
 ===================================
 -
 
+Version 0.11.6
+==============
+- Bugfix creation of comparison mapplot
+
 Version 0.11.5
 ==============
 - Update build.yml
