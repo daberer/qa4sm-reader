@@ -645,6 +645,8 @@ class QA4SMComparison:
 
         plm.make_watermark(fig, glob.watermark_pos, offset=0.01)
 
+        return fig
+
     def wrapper(self, method: str, metric=None, **kwargs):
         """
         Call the method using a list of paths and the already initialised images
