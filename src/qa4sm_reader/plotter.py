@@ -34,6 +34,22 @@ matplotlib.rcParams['boxplot.whiskerprops.linewidth'] = globals.boxplot_edgewidt
 matplotlib.rcParams['boxplot.capprops.linewidth'] = globals.boxplot_edgewidth
 matplotlib.rcParams['boxplot.medianprops.linewidth'] = globals.boxplot_edgewidth
 
+_old_boxplot = sns.boxplot
+
+def custom_boxplot(*args, **kwargs):
+    defaults = dict(
+        boxprops=dict(edgecolor=globals.boxplot_edgecolor, linewidth=globals.boxplot_edgewidth),
+        whiskerprops=dict(color=globals.boxplot_edgecolor, linewidth=globals.boxplot_edgewidth),
+        capprops=dict(color=globals.boxplot_edgecolor, linewidth=globals.boxplot_edgewidth),
+        medianprops=dict(color=globals.boxplot_edgecolor, linewidth=globals.boxplot_edgewidth),
+    )
+    for k, v in defaults.items():
+        if k in kwargs:
+            defaults[k].update(kwargs.pop(k))
+    return _old_boxplot(*args, **kwargs, **defaults)
+
+sns.boxplot = custom_boxplot
+
 class QA4SMPlotter:
     """
     Class to create image files of plots from the validation results in a QA4SMImage
@@ -370,7 +386,38 @@ class QA4SMPlotter:
 
             yield df, Var, ci
 
-    def _get_legend_title(self, Var) -> str:
+    @staticmethod
+    def _get_dataset_dict(Var) -> dict:
+        """
+        Creates dict containing dataset ids as keys and pretty name (version) as values.
+        version only gets appended if there are multiple datasets witth the same pretty name.
+        
+        Parameters
+        ----------
+        Var : QA4SMMetricVariable
+            Var in the image to make the map for.
+
+        Returns
+        -------
+        d : dict
+            Dict containing id:f"{pretty_name+(version)}" key-value pairs.
+        """
+        dataset_ref = {Var.Datasets.ref_id:f"{Var.Datasets.ref["pretty_name"]}"}
+        dataset_others = {Var.Datasets.others_id[i]:f"{Var.Datasets.others[i]["pretty_name"]}" for i in range(len(Var.Datasets.others))}
+        d = dataset_ref | dataset_others
+        # Append version number if there are multiple datasets with the same pretty name
+        groups = {}
+        for k, v in (d).items():
+            groups.setdefault(v, []).append(k)
+
+        for i in groups.keys():
+            if len(groups[i])>1: 
+                for j in groups[i]:
+                    d[j] = d[j]+f" ({Var.Datasets.dataset_metadata(j)[1]["pretty_version"]})"
+        return d
+    
+    @staticmethod
+    def _get_legend_title(Var) -> str:
         """
         Creates a title for an existing legend from a QA4SMMetricVariable.
 
@@ -384,12 +431,18 @@ class QA4SMPlotter:
         legend_title : String
             String containing the legend title
         """
-        dataset_ref = {Var.Datasets.ref_id:f"{Var.Datasets.ref["pretty_name"]} [{Var.Datasets.ref['mu']}] (spatial reference)"}
-        dataset_others = {Var.Datasets.others_id[i]:f"{Var.Datasets.others[i]["pretty_name"]} [{Var.Datasets.others[i]['mu']}]" for i in range(len(Var.Datasets.others))}
-        legend_title = "Datasets:\n" + "\n".join(f"{k}: {v}" for k, v in (dataset_ref | dataset_others).items())
+        _, _, _, scale_ds, _ = Var.get_varmeta()
+        d = QA4SMPlotter._get_dataset_dict(Var)
+        
+        # Append Unit
+        for k in d.keys():
+            d[k] = d[k]+f" [{Var.Datasets.dataset_metadata(k)[1]['mu'] if not scale_ds else scale_ds[1]["mu"]}]"
+        
+        legend_title = "Datasets:\n" + "\n".join(f"{k}: {v}" for k, v in (d).items())
         return legend_title
     
-    def _append_legend_title(self, fig, ax, Var) -> tuple:
+    @staticmethod
+    def _append_legend_title(fig, ax, Var) -> tuple:
         """
         Appends a title to an existing legend from a QA4SMMetricVariable.
 
@@ -408,7 +461,7 @@ class QA4SMPlotter:
             The same figure and axis, with the legend title updated.
         """  
         legend = ax.get_legend()
-        legend_title = self._get_legend_title(Var)
+        legend_title = QA4SMPlotter._get_legend_title(Var)
 
         # Change Size to same as rest of legend
         if len(legend.legend_handles) == 0:
@@ -418,12 +471,15 @@ class QA4SMPlotter:
             legend.set_title(legend_title, prop={'size': fs})
 
         legend._legend_box.align = "left"
+        best_loc_with_title = plm.best_legend_pos_exclude_list(ax)
+
+        # Step 4: move legend to new best position
+        legend.set_loc(best_loc_with_title)
 
         return fig, ax
     
-
-
-    def _smart_suptitle(self, fig, pad=globals.fontsize_title/2):
+    @staticmethod
+    def _smart_suptitle(fig, pad=globals.fontsize_title/2):
         """
         Compute position of Suptitle centeredd above axes.
 
@@ -455,7 +511,8 @@ class QA4SMPlotter:
 
         return x, y
     
-    def _smart_suplabel(self, fig, axis, pad=globals.fontsize_label/2):
+    @staticmethod
+    def _smart_suplabel(fig, axis, pad=globals.fontsize_label/2):
         """
         Compute position of suplabels centered according to axes.
 
@@ -512,7 +569,7 @@ class QA4SMPlotter:
         else: #fallback
             return 0.01, 0.01
 
-    def _get_ax_width(self, fig) -> float:
+    def _get_ax_width(fig) -> float:
         """Get horizontal distance of all axes in px. From left of first in row to right of last in row."""
         left = min([ax.get_position().x0 for ax in fig.get_axes()[:1]]) # Always the first ax
         right = max([ax.get_position().x1 for ax in fig.get_axes()])
@@ -520,7 +577,7 @@ class QA4SMPlotter:
 
         return ax_width_px
     
-    def _get_ax_height(self, fig) -> float:
+    def _get_ax_height(fig) -> float:
         """Get vertical distance of all axes in px. From bottom of column to top of column."""
         bottom = min([ax.get_position().y0 for ax in fig.get_axes()]) # Always the first ax
         top = max([ax.get_position().y1 for ax in fig.get_axes()])
@@ -528,7 +585,8 @@ class QA4SMPlotter:
 
         return ax_height_px
 
-    def _set_wrapped_title(self, fig, ax, title, fontsize=globals.fontsize_title,
+    @staticmethod
+    def _set_wrapped_title(fig, ax, title, fontsize=globals.fontsize_title,
                            pad=globals.title_pad, use_suptitle=False):
         """
         Set an axes or figure suptitle that automatically wraps to fit within figure width.
@@ -551,16 +609,17 @@ class QA4SMPlotter:
         fig.canvas.draw()  # needed to get renderer
 
         # width between most left point and most right point in axesin inches * dpi = pixels
-        ax_width_px = self._get_ax_width(fig)
+        ax_width_px = QA4SMPlotter._get_ax_width(fig)
 
         # estimate character width (rough, depends on font)
         wrapped = plm.wrapped_text(fig, title, ax_width_px, fontsize)
 
         if use_suptitle:
-            x, y = self._smart_suptitle(fig)
+            x, y = QA4SMPlotter._smart_suptitle(fig)
             fig.suptitle(wrapped, fontsize=fontsize, y=y, x=x, ha="center", va="bottom")
+
         else:
-            x, y = self._smart_suptitle(fig)
+            x, y = QA4SMPlotter._smart_suptitle(fig)
             ax.set_title(wrapped, fontsize=fontsize, pad=pad)
 
     def _boxplot_definition(self,
@@ -759,7 +818,7 @@ class QA4SMPlotter:
         else:
             return fig, ax
 
-    def boxplot_tc(self,
+    def boxplot_tc_old(self,
                    metric: str,
                    period: str = None,
                    out_name: str = None,
@@ -818,6 +877,86 @@ class QA4SMPlotter:
             # necessary if statement to prevent key error when no CIs are in the netCDF
             if ci:
                 ci_id = ci[id]
+            else:
+                ci_id = None
+            # create plot
+            fig, ax = self._boxplot_definition(metric=metric,
+                                               df=df,
+                                               ci=ci_id,
+                                               type='boxplot_tc',
+                                               period=period,
+                                               Var=Var,
+                                               **plotting_kwargs)
+            # save. Below workaround to avoid same names
+            if not out_name:
+                save_name = self.create_filename(Var,
+                                                 type='boxplot_tc',
+                                                 period=period)
+            else:
+                save_name = out_name
+            # save or return plotting objects
+            if save_files:
+                fnames.extend(self._save_plot(save_name, out_types=out_types))
+                plt.close('all')
+
+        if save_files:
+            return fnames
+        
+    def boxplot_tc(self,
+                   metric: str,
+                   period: str = None,
+                   out_name: str = None,
+                   out_types: Optional[Union[List[str], str]] = 'png',
+                   save_files: bool = False,
+                   **plotting_kwargs) -> list:
+        """
+        Creates a boxplot for TC metrics. Saves a figure and returns Matplotlib fig and ax objects for
+        further processing.
+
+        Parameters
+        ----------
+        metric : str
+            metric that is collected from the file for all datasets and combined
+            into one plot.
+        out_name: str
+            name of output file
+        out_types: str or list of str, Optional
+            extensions which the files should be saved in. Default is 'png'
+        save_files: bool, optional. Default is False
+            wether to save the file in the output directory
+        plotting_kwargs: arguments for _boxplot_definition function
+
+        Returns
+        -------
+        fnames: list of file names with all the extensions
+        """
+        fnames = []
+        # group Vars and CIs relative to the same dataset
+        metric_tc, ci = {}, {}
+
+        for df, Var, var_ci in self._yield_values(metric=metric, tc=True):
+            id = Var.metric_ds[0]
+            if var_ci is not None:
+                if id in ci.keys():
+                    ci[id] = pd.concat([ci[id], var_ci])
+                else:
+                    ci[id] = var_ci
+            if id in metric_tc.keys():
+                metric_tc[id][0].append(df)
+            else:
+                metric_tc[id] = [df], Var
+
+        for id, values in metric_tc.items():
+            dfs, Var = values
+            df = pd.concat(dfs)
+            df = df.reset_index().melt(id_vars = ["lat", "lon", "gpi"], var_name = "label", value_name="value").sort_values("label")
+            df["dataset"] = f"{Var.ref_ds[0]} & {Var.metric_ds[0]}"
+            # values are all Nan or NaNf - not plotted
+            if np.isnan(df["value"].to_numpy()).all():
+                continue
+            # necessary if statement to prevent key error when no CIs are in the netCDF
+            if ci:
+                ci_id = {f"{Var.ref_ds[0]} & {Var.metric_ds[0]}":ci[id]}
             else:
                 ci_id = None
             # create plot
@@ -2170,4 +2309,4 @@ class QA4SMCompPlotter:
         ]
 
         return cbp_fig.fig
-    
+
