@@ -22,7 +22,7 @@ classifiers = [
 keywords = []
 dependencies = [
     'importlib-metadata; python_version<"3.8"',
-    "xarray>=2024.0.0",
+    "xarray",
     "pandas",
     "numpy",
     "netcdf4<1.7.3",
@@ -31,7 +31,7 @@ dependencies = [
     "matplotlib",
     "pyQt5",
     "seaborn",
-    "cartopy>=0.23.0",
+    "cartopy",
     "colorcet",
     "parse",
     "scipy",
