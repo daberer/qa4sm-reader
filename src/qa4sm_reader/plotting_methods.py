@@ -1028,8 +1028,8 @@ def _make_cbar(fig,
         warnings.warn("No valid tick label extents available — skipping colorbar.")
         return fig, im, None
     
-    pad = bbox.y0-min([i.y1 for i in bboxes])#Same as pad between ax and ticklabels
-    cax = fig.add_axes([bbox.x0, min([i.y0 for i in bboxes])-globals.cax_width-pad, bbox.width, globals.cax_width])
+    pad = bbox.y0-min([i.y1 for i in valid_bboxes])#Same as pad between ax and ticklabels
+    cax = fig.add_axes([bbox.x0, min([i.y0 for i in valid_bboxes])-globals.cax_width-pad, bbox.width, globals.cax_width])
     
     cbar = fig.colorbar(im, cax=cax, orientation='horizontal', extend=extend)
     wrapped_label = wrapped_text(fig, label, fig.get_figwidth()*(cax.get_position().x1-cax.get_position().x0) * fig.dpi, globals.fontsize_label) 
