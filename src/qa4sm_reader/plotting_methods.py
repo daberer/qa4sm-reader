@@ -1095,7 +1095,7 @@ def _make_cbar(fig,
     cbar.outline.set_edgecolor('black')
     cbar.ax.tick_params(width=0.6, labelsize=default_fontsize)
 
-    return fig, im
+    return fig, im, cax
 
 
 def _CI_difference(fig, ax, ci):
