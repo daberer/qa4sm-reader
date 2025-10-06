@@ -983,6 +983,10 @@ def _make_cbar(fig,
         Whether the colorbar is for a difference plot
 
     """
+
+    if im is None or not hasattr(im, "get_array") or im.get_array() is None:
+        warnings.warn("Skipping colorbar: invalid or empty image handle")
+        return fig, im, None
     if label is None:
         label = globals._metric_name[metric]
 
@@ -990,18 +994,39 @@ def _make_cbar(fig,
     if diff_map:
         extend = "both"
 
-    fig.canvas.draw()
+    try:
+        fig.canvas.draw_idle()
+        fig.canvas.flush_events()
+        fig.canvas.draw()  # guarantees renderer exists
+    except Exception:
+        pass
+    
     bbox = ax.get_position()
 
-    labels = ax.get_xticklabels()
-
     # filter out empty labels
-    labels = [lbl for lbl in labels if lbl.get_text()]
-    if not labels:
-        return None
+    labels = [lbl for lbl in ax.get_xticklabels() if lbl.get_text()]
 
-    bboxes = [lbl.get_window_extent(renderer=fig.canvas.get_renderer()).transformed(fig.transFigure.inverted())
-              for lbl in labels]
+    if not labels:
+        warnings.warn("No tick labels found for colorbar placement — skipping colorbar.")
+        return fig, im, None
+    
+    for lbl in labels:
+        fs = lbl.get_fontsize()
+        if not np.isfinite(fs) or fs <= 0:
+            lbl.set_fontsize(globals.fontsize_ticklabel)
+    
+    renderer = fig.canvas.get_renderer()
+    valid_bboxes = []
+    for lbl in labels:
+        try:
+            bbox_lbl = lbl.get_window_extent(renderer=renderer).transformed(fig.transFigure.inverted())
+            valid_bboxes.append(bbox_lbl)
+        except RuntimeError as e:
+            warnings.warn(f"Skipping invalid label during bbox computation: {e}")
+
+    if not valid_bboxes:
+        warnings.warn("No valid tick label extents available — skipping colorbar.")
+        return fig, im, None
     
     pad = bbox.y0-min([i.y1 for i in bboxes])#Same as pad between ax and ticklabels
     cax = fig.add_axes([bbox.x0, min([i.y0 for i in bboxes])-globals.cax_width-pad, bbox.width, globals.cax_width])
@@ -1013,7 +1038,7 @@ def _make_cbar(fig,
     cbar.outline.set_edgecolor('black')
     cbar.ax.tick_params(width=0.6, labelsize=globals.fontsize_ticklabel)
 
-    return fig, im
+    return fig, im, cax
 
 
 def _CI_difference(fig, ax, ci):
@@ -2456,7 +2481,7 @@ def mapplot(
             im.set_sizes([s])   
 
     if add_cbar:  # colorbar
-        fig, im = _make_cbar(fig,
+        fig, im, cax = _make_cbar(fig,
                              ax,
                              im,
                              ref_short,
