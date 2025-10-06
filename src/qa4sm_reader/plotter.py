@@ -936,11 +936,13 @@ class QA4SMPlotter:
 
         for df, Var, var_ci in self._yield_values(metric=metric, tc=True):
             id = Var.metric_ds[0]
+            ref_ds, metric_ds, other_ds, _, _ = Var.get_varmeta()
             if var_ci is not None:
+                # var_ci["dataset"] = [f"{ref_ds[0]} & {other_ds[0]}" for i in range(len(var_ci))]
                 if id in ci.keys():
-                    ci[id] = pd.concat([ci[id], var_ci])
+                    ci[id][f"{ref_ds[0]} & {other_ds[0]}"]=var_ci
                 else:
-                    ci[id] = var_ci
+                    ci[id] = {f"{ref_ds[0]} & {other_ds[0]}":var_ci}
             if id in metric_tc.keys():
                 metric_tc[id][0].append(df)
             else:
@@ -950,13 +952,15 @@ class QA4SMPlotter:
             dfs, Var = values
             df = pd.concat(dfs)
             df = df.reset_index().melt(id_vars = ["lat", "lon", "gpi"], var_name = "label", value_name="value").sort_values("label")
-            df["dataset"] = f"{Var.ref_ds[0]} & {Var.metric_ds[0]}"
+            # df["dataset"] = f"{Var.ref_ds[0]} & {Var.metric_ds[0]}" 
+            df["dataset"] = [df["label"][i].split("\n")[1].replace("Datasets: ", "") for i in df.index] 
+            # Because the plots have to be generated in comparions with each pair of other data in tc so ifthere are 5 datasets i calculate the tc for 1 with 0-2, 0-3, 0-4
             # values are all Nan or NaNf - not plotted
             if np.isnan(df["value"].to_numpy()).all():
                 continue
             # necessary if statement to prevent key error when no CIs are in the netCDF
             if ci:
-                ci_id = {f"{Var.ref_ds[0]} & {Var.metric_ds[0]}":ci[id]}
+                ci_id = ci[id]
             else:
                 ci_id = None
             # create plot
