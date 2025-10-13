@@ -210,9 +210,9 @@ class CustomPlotObject:
                  extent: Optional[Tuple[float, float, float, float]] = None,
                  colorbar_label: Optional[str] = None,
                  title: Optional[str] = None,
-                 title_fontsize: Optional[int] = None,
-                 xy_ticks_fontsize: Optional[int] = None,
-                 colorbar_ticks_fontsize: Optional[int] = None,
+                 title_fontsize: Optional[int] = globals.fontsize_title,
+                 xy_ticks_fontsize: Optional[int] = globals.fontsize_ticklabel,
+                 colorbar_ticks_fontsize: Optional[int] = globals.fontsize_ticklabel,
                  dataset_list: list = None, ):
         """
         Generates a map plot for a specified metric and saves it to the
@@ -521,7 +521,7 @@ def custom_mapplot(
                        label=label,
                        diff_map=diff_map,
                        scl_short=scl_short)
-        if colorbar_ticks_fontsize:
+        if colorbar_ticks_fontsize and cax:
             cax.tick_params(labelsize=colorbar_ticks_fontsize)
     style_map(ax, plot_extent, grid_tick_size=xyticks_fontsize, **style_kwargs)
     if title is not None and title_fontsize is not None:
