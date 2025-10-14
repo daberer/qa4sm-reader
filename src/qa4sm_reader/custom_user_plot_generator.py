@@ -7,6 +7,7 @@ import copy
 from qa4sm_reader import globals
 import pandas as pd
 import cartopy.crs as ccrs
+import matplotlib
 import matplotlib.pyplot as plt
 import cartopy.feature as cfeature
 import xarray as xr
@@ -330,9 +331,9 @@ def custom_mapplot(
         value_range: Optional[Tuple[float, float]] = None,
         output_dir: Optional[str] = None,
         title: Optional[str] = None,
-        title_fontsize: Optional[int] = None,
-        xyticks_fontsize: Optional[int] = None,
-        colorbar_ticks_fontsize: Optional[int] = None,
+        title_fontsize: Optional[int] = globals.fontsize_title,
+        xyticks_fontsize: Optional[int] = globals.fontsize_ticklabel,
+        colorbar_ticks_fontsize: Optional[int] = globals.fontsize_ticklabel,
         **style_kwargs: Dict):
     """
         Create an overview map from df using values as color. Plots a

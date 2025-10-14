@@ -89,18 +89,51 @@ def wrapped_text(fig, text, width, fontsize) -> str:
     wrapped : str
         The text wrapped into multiple lines, separated by '\n'.
     """
+    # Validate fontsize
+    if not np.isfinite(fontsize) or fontsize <= 0:
+        warnings.warn(f"Invalid fontsize {fontsize}, using fallback value of 10")
+        fontsize = 10
+    
+    # Validate width
+    if not np.isfinite(width) or width <= 0:
+        warnings.warn(f"Invalid width {width}, returning unwrapped text")
+        return text
+    
     sample = "This is a very long text that should automatically wrap into multiple lines depending on the figure width"
-    example_text = fig.suptitle(sample, fontsize=fontsize)
-
-    renderer = fig.canvas.get_renderer()
-    char_width_px = example_text.get_window_extent(renderer=renderer).width / len(sample)
-    example_text.set_text("")
-
-    # wrap text
-    max_chars = int(width / char_width_px * 1)  # 1 ... factor, 0.8 would mean 80% of axwidth is maxlength of title
-    wrapped = "\n".join(textwrap.wrap(text, max_chars))
-
-    return wrapped
+    
+    try:
+        example_text = fig.suptitle(sample, fontsize=fontsize)
+        renderer = fig.canvas.get_renderer()
+        
+        try:
+            text_extent = example_text.get_window_extent(renderer=renderer)
+            char_width_px = text_extent.width / len(sample)
+        except (RuntimeError, ValueError) as e:
+            warnings.warn(f"Could not measure text extent: {e}. Using fallback character width estimation.")
+            # Fallback: approximate character width based on fontsize
+            # Typical monospace character is about 0.6 * fontsize in pixels at 72 dpi
+            char_width_px = fontsize * fig.dpi / 72 * 0.6
+        
+        example_text.set_text("")
+        
+        # Validate char_width_px
+        if not np.isfinite(char_width_px) or char_width_px <= 0:
+            warnings.warn("Invalid character width calculated, using fallback")
+            char_width_px = fontsize * fig.dpi / 72 * 0.6
+        
+        # wrap text
+        max_chars = int(width / char_width_px * 1)
+        
+        # Ensure max_chars is reasonable
+        if max_chars < 10:
+            max_chars = 10  # minimum sensible line length
+        
+        wrapped = "\n".join(textwrap.wrap(text, max_chars))
+        return wrapped
+        
+    except Exception as e:
+        warnings.warn(f"Text wrapping failed: {e}. Returning original text.")
+        return text
 
 def best_legend_pos_exclude_list(ax, forbidden_locs= globals.leg_loc_forbidden):
     """
@@ -987,6 +1020,7 @@ def _make_cbar(fig,
     if im is None or not hasattr(im, "get_array") or im.get_array() is None:
         warnings.warn("Skipping colorbar: invalid or empty image handle")
         return fig, im, None
+    
     if label is None:
         label = globals._metric_name[metric]
 
@@ -998,46 +1032,151 @@ def _make_cbar(fig,
         fig.canvas.draw_idle()
         fig.canvas.flush_events()
         fig.canvas.draw()  # guarantees renderer exists
-    except Exception:
+    except Exception as e:
+        warnings.warn(f"Couldn't draw figure for initializing renderer: {e}")
         pass
     
     bbox = ax.get_position()
 
-    # filter out empty labels
-    labels = [lbl for lbl in ax.get_xticklabels() if lbl.get_text()]
-
+    labels = []
+    min_fontsize = 1.0  # minimum valid fontsize
+    default_fontsize = max(globals.fontsize_ticklabel, min_fontsize)
+    
+    for lbl in ax.get_xticklabels():
+        text = lbl.get_text()
+        if not text:
+            continue  # skip empty labels
+        
+        lbl.set_visible(True)  # ensure label is visible
+        
+        # Force valid font size BEFORE any rendering operation
+        try:
+            fs = lbl.get_fontsize()
+            if not np.isfinite(fs) or fs < min_fontsize:
+                lbl.set_fontsize(default_fontsize)
+        except Exception:
+            lbl.set_fontsize(default_fontsize)
+        
+        # Optionally skip labels off-axis
+        try:
+            x, y = lbl.get_position()
+            if not (ax.get_xlim()[0] <= x <= ax.get_xlim()[1]):
+                continue
+        except Exception:
+            pass  # include label if position check fails
+        
+        labels.append(lbl)
+    
     if not labels:
-        warnings.warn("No tick labels found for colorbar placement — skipping colorbar.")
-        return fig, im, None
+        warnings.warn("No tick labels found for colorbar placement — using fallback positioning.")
+        # Use axis position as fallback
+        pad = 0.02  # 2% of figure height
+        cax = fig.add_axes([bbox.x0, bbox.y0 - globals.cax_width - pad, 
+                           bbox.width, globals.cax_width])
+        cbar = fig.colorbar(im, cax=cax, orientation='horizontal', extend=extend)
+        
+        # Set label with validation
+        try:
+            fontsize = globals.fontsize_label
+            cbar.set_label(label, fontsize=fontsize)
+        except Exception as e:
+            warnings.warn(f"Could not set colorbar label: {e}")
+        
+        cbar.outline.set_linewidth(0.6)
+        cbar.outline.set_edgecolor('black')
+        cbar.ax.tick_params(width=0.6, labelsize=default_fontsize)
+        return fig, im, cax
     
-    for lbl in labels:
-        fs = lbl.get_fontsize()
-        if not np.isfinite(fs) or fs <= 0:
-            lbl.set_fontsize(globals.fontsize_ticklabel)
+    # Try to get renderer, with fallback
+    try:
+        renderer = fig.canvas.get_renderer()
+    except Exception as e:
+        warnings.warn(f"Could not get renderer: {e}. Using fallback colorbar positioning.")
+        pad = 0.02
+        cax = fig.add_axes([bbox.x0, bbox.y0 - globals.cax_width - pad, 
+                           bbox.width, globals.cax_width])
+        cbar = fig.colorbar(im, cax=cax, orientation='horizontal', extend=extend)
+        
+        try:
+            fontsize = globals.fontsize_label
+            cbar.set_label(label, fontsize=fontsize)
+        except Exception:
+            pass
+        
+        cbar.outline.set_linewidth(0.6)
+        cbar.outline.set_edgecolor('black')
+        cbar.ax.tick_params(width=0.6, labelsize=default_fontsize)
+        return fig, im, cax
     
-    renderer = fig.canvas.get_renderer()
+    # Get bounding boxes with individual error handling
     valid_bboxes = []
     for lbl in labels:
         try:
+            # Double-check fontsize right before rendering
+            fs = lbl.get_fontsize()
+            if not np.isfinite(fs) or fs < min_fontsize:
+                lbl.set_fontsize(default_fontsize)
+            
             bbox_lbl = lbl.get_window_extent(renderer=renderer).transformed(fig.transFigure.inverted())
-            valid_bboxes.append(bbox_lbl)
-        except RuntimeError as e:
-            warnings.warn(f"Skipping invalid label during bbox computation: {e}")
-
+            
+            # Validate bbox
+            if (np.isfinite(bbox_lbl.y0) and np.isfinite(bbox_lbl.y1) and 
+                np.isfinite(bbox_lbl.x0) and np.isfinite(bbox_lbl.x1)):
+                valid_bboxes.append(bbox_lbl)
+        except (RuntimeError, ValueError, AttributeError) as e:
+            # Skip this label silently - we already warned about invalid labels
+            continue
+    
     if not valid_bboxes:
-        warnings.warn("No valid tick label extents available — skipping colorbar.")
-        return fig, im, None
+        warnings.warn("No valid tick label extents — using fallback padding")
+        pad = 5 / fig.dpi if fig.dpi > 0 else 0.02  # 5 pixels or 2% fallback
+        valid_bboxes = [ax.get_position()]  # fallback
     
-    pad = bbox.y0-min([i.y1 for i in valid_bboxes])#Same as pad between ax and ticklabels
-    cax = fig.add_axes([bbox.x0, min([i.y0 for i in valid_bboxes])-globals.cax_width-pad, bbox.width, globals.cax_width])
+    # Calculate pad safely
+    try:
+        min_y1 = min([i.y1 for i in valid_bboxes])
+        min_y0 = min([i.y0 for i in valid_bboxes])
+        pad = bbox.y0 - min_y1
+        
+        # Validate pad
+        if not np.isfinite(pad) or pad < 0:
+            pad = 5 / fig.dpi if fig.dpi > 0 else 0.02
+    except Exception:
+        pad = 5 / fig.dpi if fig.dpi > 0 else 0.02
+        min_y0 = bbox.y0 - 0.05  # fallback
     
+    # Create colorbar axes
+    cax = fig.add_axes([bbox.x0, min_y0 - globals.cax_width - pad, 
+                        bbox.width, globals.cax_width])
     cbar = fig.colorbar(im, cax=cax, orientation='horizontal', extend=extend)
-    wrapped_label = wrapped_text(fig, label, fig.get_figwidth()*(cax.get_position().x1-cax.get_position().x0) * fig.dpi, globals.fontsize_label) 
-    cbar.set_label(wrapped_label, fontsize=globals.fontsize_label)
+    
+    # Set label with full error handling
+    try:
+        fontsize = globals.fontsize_label
+        if not np.isfinite(fontsize) or fontsize <= 0:
+            fontsize = 10
+            warnings.warn(f"Invalid globals.fontsize_label, using {fontsize}")
+        
+        cax_pos = cax.get_position()
+        label_width = fig.get_figwidth() * (cax_pos.x1 - cax_pos.x0) * fig.dpi
+        
+        if not np.isfinite(label_width) or label_width <= 0:
+            wrapped_label = label
+        else:
+            wrapped_label = wrapped_text(fig, label, label_width, fontsize)
+        
+        cbar.set_label(wrapped_label, fontsize=fontsize)
+    except Exception as e:
+        warnings.warn(f"Failed to set colorbar label: {e}")
+        try:
+            cbar.set_label(label, fontsize=10)
+        except Exception:
+            pass  # Give up on label if even simple setting fails
+    
     cbar.outline.set_linewidth(0.6)
     cbar.outline.set_edgecolor('black')
-    cbar.ax.tick_params(width=0.6, labelsize=globals.fontsize_ticklabel)
-
+    cbar.ax.tick_params(width=0.6, labelsize=default_fontsize)
+    
     return fig, im, cax
 
 
