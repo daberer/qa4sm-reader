@@ -8,8 +8,7 @@ import shutil
 import tempfile
 import sys
 from pathlib import Path
-from osgeo import gdal, osr
-import rioxarray
+import zarr
 from qa4sm_reader.intra_annual_temp_windows import TemporalSubWindowsCreator, InvalidTemporalSubWindowError
 from qa4sm_reader.globals import    METRICS, TC_METRICS, STABILITY_METRICS, NON_METRICS, METADATA_TEMPLATE, \
                                     IMPLEMENTED_COMPRESSIONS, ALLOWED_COMPRESSION_LEVELS, \
@@ -791,17 +790,17 @@ class Pytesmo2Qa4smResultsTranscriber:
         return sort_tsws(tsws)
 
 
-class Qa4smResults2GeoTiffTranscriber:
+class Qa4smResults2ZarrTranscriber:
     """
-    Transcriber for converting QA4SM results to GeoTIFF format.
-    
-    Optimized for scenarios where the dataset is already in memory.
+    Transcriber for converting QA4SM results to Zarr format.
+
+    Optimized for direct saving of datasets for use with Datashader.
     """
 
     def __init__(self, dataset, nc_filepath, out_dir):
         """
         Initialize the transcriber.
-        
+
         Parameters
         ----------
         dataset : xarray.Dataset
@@ -809,184 +808,46 @@ class Qa4smResults2GeoTiffTranscriber:
         nc_filepath : Path or str
             Original image filepath (used for naming output)
         out_dir : Path or str
-            Directory where GeoTIFF files will be saved
+            Directory where Zarr files will be saved
         """
         self.ds = dataset
         self.nc_filepath = Path(nc_filepath)
         self.out_dir = Path(out_dir)
-        self.geotiff_filepath = self.out_dir / f"{self.nc_filepath.stem}.tif"
-    
-    def derive_grid_step_size(self, ref_da):
-        """
-        Derive the regular grid step size from the dataset coordinates
-        
-        Parameters
-        ----------
-        ref_da : xarray.DataArray
-            The unstacked data array
-            
-        Returns
-        -------
-        tuple
-            (lon_step, lat_step) in degrees
-        """
-        # Get coordinate arrays
-        lons = np.sort(ref_da.lon.values)
-        lats = np.sort(ref_da.lat.values)
-        
-        # Calculate all differences
-        lon_diffs = np.diff(lons)
-        lat_diffs = np.diff(lats)
-        
-        # Filter out large gaps (likely from landmask) - keep only small steps
-        # Assume regular steps are < 2 degrees (adjust if needed for your data)
-        regular_lon_diffs = lon_diffs[lon_diffs < 2.0]
-        regular_lat_diffs = lat_diffs[lat_diffs < 2.0]
-        
-        if len(regular_lon_diffs) == 0 or len(regular_lat_diffs) == 0:
-            raise ValueError("Cannot determine regular grid spacing - no small steps found")
-        
-        # Use the most common step size (mode) or median of small steps
-        lon_step = np.median(regular_lon_diffs)
-        lat_step = np.median(regular_lat_diffs)
-        
-        # Round to reasonable precision (避免浮点精度问题)
-        lon_step = np.round(lon_step, 6)
-        lat_step = np.round(lat_step, 6)
-        
-        print(f"Derived grid step sizes: lon={lon_step}°, lat={lat_step}°")
-        print(f"Based on {len(regular_lon_diffs)} lon steps, {len(regular_lat_diffs)} lat steps")
-        
-        return lon_step, lat_step
-    
-    def fill_missing_grid_points(self, ref_da):
-        """
-        Fill missing longitude/latitude grid points with NaNs to ensure regular spacing
-        
-        Parameters
-        ----------
-        ref_da : xarray.DataArray
-            The unstacked data array
-            
-        Returns
-        -------
-        xarray.DataArray
-            Data array with regular grid filled with NaNs where needed
-        """
-        # Automatically derive step sizes
-        lon_step, lat_step = self.derive_grid_step_size(ref_da)
-        
-        # Create complete regular grids
-        lon_min, lon_max = ref_da.lon.min().item(), ref_da.lon.max().item()
-        lat_min, lat_max = ref_da.lat.min().item(), ref_da.lat.max().item()
-        
-        # Generate regular coordinate arrays
-        complete_lons = np.arange(lon_min, lon_max + lon_step/2, lon_step)
-        complete_lats = np.arange(lat_min, lat_max + lat_step/2, lat_step)
-        
-        print(f"Original grid: {len(ref_da.lon)} lons, {len(ref_da.lat)} lats")
-        print(f"Complete grid: {len(complete_lons)} lons, {len(complete_lats)} lats")
-        
-        # Reindex to the complete regular grid (fills missing with NaN)
-        ref_da_complete = ref_da.reindex(lon=complete_lons, lat=complete_lats, 
-                                    method=None)  # method=None ensures NaN fill
-        
-        return ref_da_complete
+        self.zarr_filepath = self.out_dir / f"{self.nc_filepath.stem}.zarr"
 
-    def save_geotiff(self):
+    def save_zarr(self):
         """
-        Save data for the specified period as GeoTIFF in EPSG:4326.
-        
-        Returns
-        -------
-        str
-            Path to the saved GeoTIFF file
+        Save data as Zarr with memory-efficient streaming.
         """
-        
+        from dask.diagnostics import ProgressBar
+        import dask
+
         variables_to_export = [
             x for x in self.ds.data_vars if x not in ['_row_size', 'gpi']
         ]
-        
-        # UNSTACK AND FILL THE ENTIRE DATASET ONCE
-        print("Unstacking and filling grid for entire dataset...")
-        
-        # Unstack all variables at once
-        ds_unstacked = self.ds[variables_to_export].set_index(loc=['lat', 'lon']).unstack('loc')
-        
-        # Fill missing grid points for the first variable to determine the complete grid
-        ref_da = ds_unstacked[variables_to_export[0]]
-        ref_da_filled = self.fill_missing_grid_points(ref_da)
-        
-        # Get the complete coordinate arrays from the filled reference
-        complete_lons = ref_da_filled.lon.values
-        complete_lats = ref_da_filled.lat.values
-        
-        # Reindex ALL variables to the same complete grid
-        ds_complete = ds_unstacked.reindex(
-            lon=complete_lons, 
-            lat=complete_lats, 
-            method=None,
-            fill_value=np.nan
-        )
-        
-        # Set up rio properties
-        ds_complete = ds_complete.rio.write_crs("EPSG:4326", inplace=False)
-        ds_complete = ds_complete.drop('idx')
-        
-        # Get the GDAL transform and dimensions from the completed dataset
-        transform = ds_complete.rio.transform().to_gdal()
-        ncols, nrows = ds_complete.rio.width, ds_complete.rio.height
-        
-        print(f"Final grid dimensions: {ncols} x {nrows}")
-        print(f"Pixel size: {abs(transform[1]):.6f}° x {abs(transform[5]):.6f}°")
-        
-        # Create the multi-band GeoTIFF
-        driver = gdal.GetDriverByName("GTiff")
-        out_ds = driver.Create(str(self.geotiff_filepath),
-                            ncols,
-                            nrows,
-                            len(variables_to_export),
-                            gdal.GDT_Float32,
-                            options=[
-                                "COMPRESS=ZSTD", "TILED=YES",
-                                "BLOCKXSIZE=256", "BLOCKYSIZE=256"
-                            ])
-        if out_ds is None:
-            raise RuntimeError(f"Could not create {self.geotiff_filepath}")
-        
-        # Set geotransform and projection to EPSG:4326
-        out_ds.SetGeoTransform(transform)
-        srs = osr.SpatialReference()
-        srs.ImportFromEPSG(4326)
-        out_ds.SetProjection(srs.ExportToWkt())
-        
-        # Loop over variables and write each as a band
-        for idx, var in enumerate(variables_to_export, start=1):
-            print(f"Processing variable: {var}")
-            
-            # Use the already processed data from ds_complete
-            da = ds_complete[var]
-            
-            # Apply status remapping if variable starts with "status"
-            if var.startswith("status"):
-                unique_vals = np.unique(da.values[~np.isnan(da.values)])
-                for val in unique_vals:
-                    if val in status_replace.keys():
-                        da = da.where(da != val, status_replace[val])
-            
-            # Convert to float32 for GDAL
-            band_data = da.values.astype(np.float32)
-            band = out_ds.GetRasterBand(idx)
-            band.WriteArray(band_data)
-            band.SetDescription(var)
-        
-        # Flush and close the dataset
-        out_ds.FlushCache()
-        del out_ds
-        
-        print(f"Saved multi-band GeoTIFF to {self.geotiff_filepath}")
 
-        return self.geotiff_filepath
+        print(f"Saving {len(variables_to_export)} variables to Zarr...")
+
+        ds_subset = self.ds[variables_to_export]
+
+        # Ensure proper chunking (prevents loading entire dataset)
+        if not ds_subset.chunks:
+            # Auto-chunk if not already chunked
+            ds_subset = ds_subset.chunk('auto')
+
+        # Configure Dask for better performance
+        with dask.config.set(scheduler='threads', num_workers=4):
+            with ProgressBar():
+                ds_subset.to_zarr(
+                    self.zarr_filepath,
+                    mode='w',
+                    consolidated=True,
+                    compute=True
+                )
+
+        print(f"Saved Zarr to {self.zarr_filepath}")
+        return self.zarr_filepath
+
 
 
 
