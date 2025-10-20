@@ -5,7 +5,7 @@ from typing import Union, List, Tuple, Dict
 from itertools import chain
 
 import pandas as pd
-from qa4sm_reader.netcdf_transcription import Pytesmo2Qa4smResultsTranscriber, Qa4smResults2GeoTiffTranscriber
+from qa4sm_reader.netcdf_transcription import Pytesmo2Qa4smResultsTranscriber, Qa4smResults2ZarrTranscriber
 from qa4sm_reader.plotter import QA4SMPlotter, QA4SMCompPlotter
 from qa4sm_reader.img import QA4SMImg
 import qa4sm_reader.globals as globals
@@ -116,9 +116,9 @@ def plot_all(filepath: str,
         extensions which the files should be saved in
     save_all: bool, optional (default: True)
         all plotted images are saved to the output directory
-    save_geotiff: bool, optional (default: True)
-        netcdf file is transformed into additional geo_tiff with all variables, 
-        with added pyramid layers for the tile creation of interactive maps in EPSG3857
+    save_zarr: bool, optional (default: True)
+        netcdf file is transformed into additional zarr with all variables,
+        for fast tile creation of interactive maps
     save_metadata: str or bool, optional (default: 'never')
         for each metric, metadata plots are provided
         (see plotter.QA4SMPlotter.plot_save_metadata)
@@ -144,6 +144,7 @@ def plot_all(filepath: str,
     fnames_csv: list
     fnames_cbplot: list
         list of filenames for created comparison boxplots
+    fnames_zarr: list
     """
     if isinstance(save_metadata, bool):
         if not save_metadata:
@@ -159,7 +160,7 @@ def plot_all(filepath: str,
                          f"but `{save_metadata}` was passed.")
 
     # initialise image and plotter
-    fnames_bplot, fnames_mapplot, fnames_csv, fnames_geotiff = [], [], [], []
+    fnames_bplot, fnames_mapplot, fnames_csv, fnames_zarr = [], [], [], []
 
     comparison_periods = None
     if temporal_sub_windows is None:
@@ -188,16 +189,14 @@ def plot_all(filepath: str,
         if metrics is None:
             metrics = img.metrics
 
-        if save_geotiff:
-            geotiff_transcriber = Qa4smResults2GeoTiffTranscriber(
+        if save_zarr:
+            zarr_transcriber = Qa4smResults2ZarrTranscriber(
                 dataset=img.ds,
                 nc_filepath=filepath,
-                out_dir=Path(out_dir) /
-                str(period) if period else Path(out_dir))
+                out_dir=Path(out_dir))
 
-            # Call the save_geotiff method on the instance
-            out_geotiff = geotiff_transcriber.save_geotiff()
-            fnames_geotiff.append(out_geotiff)
+            out_zarr = zarr_transcriber.save_zarr()
+            fnames_zarr.append(out_zarr)
 
         # iterate metrics and create files in output directory
         for metric in metrics:
@@ -262,7 +261,7 @@ def plot_all(filepath: str,
     #             plt.close(_fig)
     #             fnames_cbplot.extend(spth)
 
-    return fnames_bplot, fnames_mapplot, fnames_csv, fnames_cbplot, fnames_geotiff
+    return fnames_bplot, fnames_mapplot, fnames_csv, fnames_cbplot, fnames_zarr
 
 
 def get_img_stats(
