@@ -7,6 +7,7 @@ import copy
 from qa4sm_reader import globals
 import pandas as pd
 import cartopy.crs as ccrs
+import matplotlib
 import matplotlib.pyplot as plt
 import cartopy.feature as cfeature
 import xarray as xr
@@ -210,9 +211,9 @@ class CustomPlotObject:
                  extent: Optional[Tuple[float, float, float, float]] = None,
                  colorbar_label: Optional[str] = None,
                  title: Optional[str] = None,
-                 title_fontsize: Optional[int] = None,
-                 xy_ticks_fontsize: Optional[int] = None,
-                 colorbar_ticks_fontsize: Optional[int] = None,
+                 title_fontsize: Optional[int] = globals.fontsize_title,
+                 xy_ticks_fontsize: Optional[int] = globals.fontsize_ticklabel,
+                 colorbar_ticks_fontsize: Optional[int] = globals.fontsize_ticklabel,
                  dataset_list: list = None, ):
         """
         Generates a map plot for a specified metric and saves it to the
@@ -330,9 +331,9 @@ def custom_mapplot(
         value_range: Optional[Tuple[float, float]] = None,
         output_dir: Optional[str] = None,
         title: Optional[str] = None,
-        title_fontsize: Optional[int] = None,
-        xyticks_fontsize: Optional[int] = None,
-        colorbar_ticks_fontsize: Optional[int] = None,
+        title_fontsize: Optional[int] = globals.fontsize_title,
+        xyticks_fontsize: Optional[int] = globals.fontsize_ticklabel,
+        colorbar_ticks_fontsize: Optional[int] = globals.fontsize_ticklabel,
         **style_kwargs: Dict):
     """
         Create an overview map from df using values as color. Plots a
@@ -436,7 +437,7 @@ def custom_mapplot(
                 cmap.set_over("red")
 
     # initialize plot
-    fig, ax, cax = init_plot(figsize, dpi, add_cbar, projection)
+    fig, ax = init_plot(figsize, projection=projection)
     ax.coastlines()
     ax.add_feature(cfeature.BORDERS, linestyle=":")
     ax.add_feature(cfeature.LAND, facecolor="lightgray", edgecolor="black")
@@ -504,24 +505,26 @@ def custom_mapplot(
 
     if add_cbar:  # colorbar
         try:
-            _make_cbar(fig,
+            _, _, cax = _make_cbar(fig,
+                       ax,
                        im,
-                       cax,
                        ref_short,
                        metric,
                        label=label,
                        diff_map=diff_map,
-                       scl_short=scl_short)
+                       scl_short=scl_short,
+                       wrap_text=True)
         except:
-            _make_cbar(fig,
+            _, _, cax = _make_cbar(fig,
+                       ax,
                        im,
-                       cax,
                        ref_short,
                        metric.split('_')[0],
                        label=label,
                        diff_map=diff_map,
-                       scl_short=scl_short)
-        if colorbar_ticks_fontsize:
+                       scl_short=scl_short,
+                       wrap_text=True)
+        if colorbar_ticks_fontsize and cax:
             cax.tick_params(labelsize=colorbar_ticks_fontsize)
     style_map(ax, plot_extent, grid_tick_size=xyticks_fontsize, **style_kwargs)
     if title is not None and title_fontsize is not None:
@@ -530,5 +533,5 @@ def custom_mapplot(
         ax.set_title(title)
 
     plt.tight_layout()
-    plt.savefig(f"{output_dir}/{column_name}_map.png", dpi=300)
+    plt.savefig(f"{output_dir}/{column_name}_map.png", dpi=100)
     return fig, ax
