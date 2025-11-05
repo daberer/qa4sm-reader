@@ -5,8 +5,8 @@ Changelog
 Unreleased changes in master branch
 ===================================
 
-Version 0.12.0
-==============
+Version 0.12
+============
 - Standardized plots – Unified sizing, fonts, labels, and colorblind-safe palettes
 - Streamlined titles – Removed repetitive text, moved details to body content
 - Fixed dataset combinations – All dataset pairs now display correctly
