@@ -401,7 +401,7 @@ class QA4SMPlotter:
         d : dict
             Dict containing id:f"{pretty_name+(version)}" key-value pairs.
         """
-        dataset_ref = {Var.Datasets.ref_id:f"{Var.Datasets.ref["pretty_name"]}"}
+        dataset_ref = {Var.Datasets.ref_id:f'{Var.Datasets.ref["pretty_name"]}'}
         dataset_others = {Var.Datasets.others_id[i]:f"{Var.Datasets.others[i]["pretty_name"]}" for i in range(len(Var.Datasets.others))}
         d = dataset_ref | dataset_others
         # Append version number if there are multiple datasets with the same pretty name
