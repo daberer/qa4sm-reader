@@ -8,14 +8,14 @@ import shutil
 import tempfile
 import sys
 from pathlib import Path
-import dask
+import zarr
 from qa4sm_reader.intra_annual_temp_windows import TemporalSubWindowsCreator, InvalidTemporalSubWindowError
 from qa4sm_reader.globals import    METRICS, TC_METRICS, STABILITY_METRICS, NON_METRICS, METADATA_TEMPLATE, \
                                     IMPLEMENTED_COMPRESSIONS, ALLOWED_COMPRESSION_LEVELS, \
                                     INTRA_ANNUAL_METRIC_TEMPLATE, INTRA_ANNUAL_TCOL_METRIC_TEMPLATE, \
                                     TEMPORAL_SUB_WINDOW_SEPARATOR, DEFAULT_TSW, TEMPORAL_SUB_WINDOW_NC_COORD_NAME, \
                                     MAX_NUM_DS_PER_VAL_RUN, DATASETS, OLD_NCFILE_SUFFIX, status_replace
-import asyncio
+
 
 class TemporalSubWindowMismatchError(Exception):
     '''Exception raised when the temporal sub-windows provided do not match the ones present in the provided netCDF file.'''
@@ -790,184 +790,63 @@ class Pytesmo2Qa4smResultsTranscriber:
         return sort_tsws(tsws)
 
 
-
-
-
-import signal
-from contextlib import contextmanager
-
-class TimeoutException(Exception):
-    pass
-
-@contextmanager
-def timeout_context(seconds):
-    """Context manager for timeout operations"""
-    def timeout_handler(signum, frame):
-        raise TimeoutException(f"Operation timed out after {seconds} seconds")
-
-    # Set the signal handler and alarm
-    old_handler = signal.signal(signal.SIGALRM, timeout_handler)
-    signal.alarm(seconds)
-    try:
-        yield
-    finally:
-        signal.alarm(0)  # Disable the alarm
-        signal.signal(signal.SIGALRM, old_handler)
-
-
 class Qa4smResults2ZarrTranscriber:
-    """Transcriber for converting QA4SM results to Zarr format."""
+    """
+    Transcriber for converting QA4SM results to Zarr format.
+
+    Optimized for direct saving of datasets for use with Datashader.
+    """
 
     def __init__(self, dataset, nc_filepath, out_dir):
-        print(f"[ZARR-INIT] Creating transcriber")
+        """
+        Initialize the transcriber.
+
+        Parameters
+        ----------
+        dataset : xarray.Dataset
+            The in-memory dataset to be converted
+        nc_filepath : Path or str
+            Original image filepath (used for naming output)
+        out_dir : Path or str
+            Directory where Zarr files will be saved
+        """
         self.ds = dataset
         self.nc_filepath = Path(nc_filepath)
         self.out_dir = Path(out_dir)
         self.zarr_filepath = self.out_dir / f"{self.nc_filepath.stem}.zarr"
-        print(f"[ZARR-INIT] Output will be: {self.zarr_filepath}")
 
+    def save_zarr(self):
+        """
+        Save data as Zarr with memory-efficient streaming.
+        """
+        from dask.diagnostics import ProgressBar
+        import dask
 
-    def save_zarr(self, timeout_per_var=120, max_retries=4):
-        print(f"\n{'='*60}")
-        print(f"[ZARR] Starting synchronous save at {time.strftime('%H:%M:%S')}")
-        print(f"[ZARR] Timeout per variable: {timeout_per_var}s | Max retries: {max_retries}")
-        print(f"{'='*60}\n")
-
-        start_time = time.time()
-
-        # Ensure output directory exists
-        print(f"[ZARR] Ensuring output directory exists...")
-        self.out_dir.mkdir(parents=True, exist_ok=True)
-
-        # Remove old zarr if exists
-        if self.zarr_filepath.exists():
-            print(f"[ZARR] Removing existing Zarr...")
-            import shutil
-            shutil.rmtree(self.zarr_filepath)
-
-        # Filter variables
-        print(f"[ZARR] Filtering variables...")
         variables_to_export = [
-            x for x in self.ds.data_vars 
-            if x not in ['_row_size', 'gpi']
+            x for x in self.ds.data_vars if x not in ['_row_size', 'gpi']
         ]
-        print(f"[ZARR] Found {len(variables_to_export)} variables to export")
-        print(f"[ZARR] Variables: {', '.join(variables_to_export)}\n")
 
-        # Create subset
+        print(f"Saving {len(variables_to_export)} variables to Zarr...")
+
         ds_subset = self.ds[variables_to_export]
-        size_mb = ds_subset.nbytes / 1024**2
-        print(f"[ZARR] Total dataset size: {size_mb:.2f} MB\n")
 
-        # Track failures
-        failed_vars = []
+        # Ensure proper chunking (prevents loading entire dataset)
+        if not ds_subset.chunks:
+            # Auto-chunk if not already chunked
+            ds_subset = ds_subset.chunk('auto')
 
-        # Write each variable separately with retry logic
-        for i, var_name in enumerate(variables_to_export, 1):
-            var_start = time.time()
-            print(f"[ZARR] [{i}/{len(variables_to_export)}] Processing '{var_name}'...")
+        # Configure Dask for better performance
+        with dask.config.set(scheduler='threads', num_workers=4):
+            with ProgressBar():
+                ds_subset.to_zarr(
+                    self.zarr_filepath,
+                    mode='w',
+                    consolidated=True,
+                    compute=True
+                )
 
-            # Get variable info
-            var_data = ds_subset[var_name]
-            var_size_mb = var_data.nbytes / 1024**2
-            print(f"       Size: {var_size_mb:.2f} MB | Shape: {var_data.shape} | Dtype: {var_data.dtype}")
-
-            # Retry loop
-            success = False
-            for attempt in range(1, max_retries + 1):
-                try:
-                    if attempt > 1:
-                        print(f"       Retry attempt {attempt}/{max_retries}...")
-
-                    # Compute with timeout
-                    print(f"       Computing (timeout: {timeout_per_var}s)...")
-                    with timeout_context(timeout_per_var):
-                        with dask.config.set(scheduler='synchronous'):
-                            var_computed = var_data.compute()
-
-                    # Create dataset with just this variable
-                    ds_single = xr.Dataset(
-                        {var_name: var_computed},
-                        coords=ds_subset.coords
-                    )
-
-                    # Write to zarr with timeout
-                    print(f"       Writing to Zarr (timeout: {timeout_per_var}s)...")
-                    mode = 'w' if i == 1 else 'a'
-
-                    with timeout_context(timeout_per_var):
-                        ds_single.to_zarr(
-                            str(self.zarr_filepath),
-                            mode=mode,
-                            consolidated=False,
-                            safe_chunks=False
-                        )
-
-                    var_elapsed = time.time() - var_start
-                    print(f"       ✓ Completed in {var_elapsed:.2f}s\n")
-                    success = True
-                    break
-
-                except TimeoutException as e:
-                    print(f"       ✗ Timeout on attempt {attempt}: {e}")
-                    if attempt < max_retries:
-                        wait_time = 5 * attempt  # Progressive backoff
-                        print(f"       Waiting {wait_time}s before retry...")
-                        time.sleep(wait_time)
-                    else:
-                        print(f"       ✗ Failed after {max_retries} attempts\n")
-                        failed_vars.append(var_name)
-
-                except Exception as e:
-                    print(f"       ✗ Error on attempt {attempt}: {type(e).__name__}: {e}")
-                    if attempt < max_retries:
-                        wait_time = 5 * attempt
-                        print(f"       Waiting {wait_time}s before retry...")
-                        time.sleep(wait_time)
-                    else:
-                        print(f"       ✗ Failed after {max_retries} attempts\n")
-                        failed_vars.append(var_name)
-
-            if not success:
-                print(f"       ⚠ Skipping '{var_name}' after all retries failed\n")
-
-        # Consolidate metadata at the end
-        print(f"[ZARR] Consolidating metadata...")
-        try:
-            import zarr
-            zarr.consolidate_metadata(str(self.zarr_filepath))
-        except Exception as e:
-            print(f"[ZARR] Warning: Could not consolidate metadata: {e}")
-
-        # Verify creation
-        if not self.zarr_filepath.exists():
-            raise FileNotFoundError(f"Zarr was not created at {self.zarr_filepath}")
-
-        # Calculate size
-        total_size = sum(
-            os.path.getsize(os.path.join(dirpath, filename))
-            for dirpath, _, filenames in os.walk(self.zarr_filepath)
-            for filename in filenames
-        )
-
-        elapsed = time.time() - start_time
-        print(f"\n{'='*60}")
-        if failed_vars:
-            print(f"[ZARR] ⚠ Completed with {len(failed_vars)} failures")
-            print(f"[ZARR] Failed variables: {', '.join(failed_vars)}")
-        else:
-            print(f"[ZARR] ✓ All variables saved successfully!")
-        print(f"[ZARR] ✓ Total size: {total_size / 1024**2:.2f} MB")
-        print(f"[ZARR] ✓ Total time: {elapsed:.2f}s")
-        print(f"[ZARR] ✓ Location: {self.zarr_filepath}")
-        print(f"{'='*60}\n")
-
+        print(f"Saved Zarr to {self.zarr_filepath}")
         return self.zarr_filepath
-
-
-
-
-
 
 
 
