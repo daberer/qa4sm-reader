@@ -621,6 +621,7 @@ def test_plotting(seasonal_qa4sm_file, monthly_qa4sm_file, stability_qa4sm_file,
         out_dir=tmp_seasonal_dir,
         save_all=True,
         out_type=['png', 'svg'],
+        test_mode=True,
     )
 
     metrics_not_plotted = [*globals.metric_groups['common'], *globals.metric_groups['triple'], *globals._metadata_exclude]
@@ -684,6 +685,7 @@ def test_plotting(seasonal_qa4sm_file, monthly_qa4sm_file, stability_qa4sm_file,
         save_all=True,
         save_metadata=True,
         out_type=['png', 'svg'],
+        test_mode=True,
     )
 
     tsw_dirs_expected = Pytesmo2Qa4smResultsTranscriber.get_tsws_from_ncfile(
@@ -741,6 +743,7 @@ def test_plotting(seasonal_qa4sm_file, monthly_qa4sm_file, stability_qa4sm_file,
         save_all=True,
         save_metadata=True,
         out_type=['png', 'svg'],
+        test_mode=True,
     )
 
     tsw_dirs_expected = Pytesmo2Qa4smResultsTranscriber.get_tsws_from_ncfile(

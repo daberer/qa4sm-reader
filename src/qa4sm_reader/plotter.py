@@ -630,6 +630,9 @@ class QA4SMPlotter:
             offset of boxplots
         Var: QA4SMMetricVariable, optional. Default is None
             Specified in case mds meta is needed
+        **kwargs : dict
+            Additional plotting arguments. If test_mode=True is passed,
+            uses low-resolution settings for faster test execution.
         """
         # plot label
         unit_ref = self.ref['short_name']
@@ -643,6 +646,7 @@ class QA4SMPlotter:
             ci=ci,
             label=label,
             figsize=figsize,
+            **kwargs,
         )
         if not Var:
             # when we only need reference dataset from variables (i.e. is the same):
@@ -667,7 +671,8 @@ class QA4SMPlotter:
                             df: pd.DataFrame,
                             type: str,
                             period: str = None,
-                            Var=None) -> tuple:
+                            Var=None,
+                            **kwargs) -> tuple:
         """
         Define parameters of plot
 
@@ -680,6 +685,9 @@ class QA4SMPlotter:
             metric that is collected from the file for all variables.
         Var: QA4SMMetricVariable, optional. Default is None
             Specified in case mds meta is needed
+        **kwargs : dict
+            Additional plotting arguments. If test_mode=True is passed,
+            uses low-resolution settings for faster test execution.
         """
         # plot label
         parts = [globals._metric_name[metric]]
@@ -688,7 +696,8 @@ class QA4SMPlotter:
         figsize = [globals.boxplot_width_vertical, globals.boxplot_height_vertical]
         fig, ax = plm.barplot(df=df,
                               figsize=figsize,
-                              label='# of validation errors')
+                              label='# of validation errors',
+                              **kwargs)
         if not Var:
             # when we only need reference dataset from variables (i.e. is the same):
             for Var in self.img._iter_vars(type="metric",
@@ -892,7 +901,7 @@ class QA4SMPlotter:
         period: str = None,
         out_types: Optional[Union[List[str], str]] = 'png',
         save_files: bool = False,
-    ) -> Union[list, None]:
+        **plotting_kwargs) -> Union[list, None]:
         """
         Creates a barplot of validation errors betweeen two or three datasets.
         Saves a figure and returns Matplotlib fig and ax objects for
@@ -906,6 +915,7 @@ class QA4SMPlotter:
             extensions which the files should be saved in. Default is 'png'
         save_files: bool, optional. Default is False
             wether to save the file in the output directory
+        plotting_kwargs: arguments for _barplot_definition function
 
         Returns
         -------
@@ -927,7 +937,8 @@ class QA4SMPlotter:
                                      df=values,
                                      type='barplot_basic',
                                      period=period,
-                                     Var=Var)
+                                     Var=Var,
+                                     **plotting_kwargs)
 
             out_name = self.create_filename(Var,
                                             type='barplot_basic',
@@ -971,7 +982,8 @@ class QA4SMPlotter:
             have the maximum available dpi).
             Otherwise, high resolution datasets are assigned the
             maximum dpi as per globals.max_dpi
-        style_kwargs: arguments for mapplot function
+        style_kwargs: arguments for mapplot function. If test_mode=True is passed,
+            uses low-resolution settings for faster test execution.
 
         Returns
         -------
@@ -1135,7 +1147,8 @@ class QA4SMPlotter:
             fnames_bplot = self.barplot(metric='status',
                                         period=period,
                                         out_types=out_types,
-                                        save_files=save_all)
+                                        save_files=save_all,
+                                        **plotting_kwargs)
 
         elif Metric.g == 'common' or Metric.g == 'pairwise' or Metric.g == 'pairwise_stability':
             fnames_bplot = self.boxplot_basic(metric=metric,

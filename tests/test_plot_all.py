@@ -47,6 +47,7 @@ def test_plot_all(plotdir):
         out_dir=plotdir,
         save_all=True,
         save_metadata=True,
+        test_mode=True,
     )
 
     for tswp in temporal_sub_windows_present:

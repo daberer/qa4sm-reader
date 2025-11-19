@@ -1422,13 +1422,19 @@ def boxplot(
         colorscheme, or classic blue, white, red is used
         'old' -> blue, white, red
         'new' -> hashed dataset combinations + hatching
-
+    **plotting_kwargs : dict
+            Additional plotting arguments. If test_mode=True is passed,
+            uses low-resolution settings for faster test execution.
     Returns
     -------
     fig : matplotlib.figure.Figure
         the boxplot
     ax : matplotlib.axes.Axes
     """
+    test_mode = plotting_kwargs.pop('test_mode', False)
+    if test_mode:
+        dpi = 10
+        figsize = (2, 2)
     values = df.copy()
     if "dataset" in values.columns:
         unique_combos = values["dataset"].unique()
@@ -1635,6 +1641,7 @@ def barplot(
     figsize=None,
     dpi=100,
     axis=None,
+    **kwargs,
 ) -> tuple:
     """
     Create a barplot from the validation errors in df.
@@ -1654,6 +1661,9 @@ def barplot(
         Resolution for raster graphic output. The default is globals.dpi.
     axis : matplotlib Axis obj.
         if provided, the plot will be shown on it
+    **kwargs : dict
+        Additional plotting arguments. If test_mode=True is passed,
+        uses low-resolution settings for faster test execution.
 
     Returns
     -------
@@ -1661,6 +1671,10 @@ def barplot(
         the boxplot
     ax : matplotlib.axes.Axes
     """
+    test_mode = kwargs.pop('test_mode', False)
+    if test_mode:
+        dpi = 10
+        figsize = (2, 2)
 
     ax = axis
     if axis is None:
@@ -2451,7 +2465,8 @@ def mapplot(
         diff_map : bool, default is False
             if True, a difference colormap is created
         **style_kwargs :
-            Keyword arguments for plotter.style_map().
+            Keyword arguments for plotter.style_map().  If test_mode=True is passed,
+            uses low-resolution settings for faster test execution.
 
         Returns
         -------
@@ -2459,6 +2474,11 @@ def mapplot(
             the boxplot
         ax : matplotlib.axes.Axes
         """
+    test_mode = style_kwargs.pop('test_mode', False)
+    if test_mode:
+        dpi = 10
+        figsize = (2, 2)
+        add_cbar = False
     if not colormap:
         cmap = globals._colormaps[metric]
     else:
