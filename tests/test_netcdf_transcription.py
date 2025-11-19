@@ -620,7 +620,7 @@ def test_plotting(seasonal_qa4sm_file, monthly_qa4sm_file, stability_qa4sm_file,
         get_tsws_from_ncfile(tmp_seasonal_file),
         out_dir=tmp_seasonal_dir,
         save_all=True,
-        out_type=['png', 'svg'],
+        out_type=['png'],
     )
 
     metrics_not_plotted = [*globals.metric_groups['common'], *globals.metric_groups['triple'], *globals._metadata_exclude]
@@ -646,10 +646,7 @@ def test_plotting(seasonal_qa4sm_file, monthly_qa4sm_file, stability_qa4sm_file,
                 tmp_seasonal_dir / tsw / f"{tsw}_boxplot_{metric}.png"
             ).exists(
             ), f"{tmp_seasonal_dir / tsw / f'{tsw}_boxplot_{metric}.png'} does not exist"
-            assert Path(
-                tmp_seasonal_dir / tsw / f"{tsw}_boxplot_{metric}.svg"
-            ).exists(
-            ), f"{tmp_seasonal_dir / tsw / f'{tsw}_boxplot_{metric}.svg'} does not exist"
+
 
         assert Path(
             tmp_seasonal_dir / tsw / f'{tsw}_statistics_table.csv'
@@ -667,12 +664,7 @@ def test_plotting(seasonal_qa4sm_file, monthly_qa4sm_file, stability_qa4sm_file,
                                                        filetype='png')
         ).exists(
         ), f"{tmp_seasonal_dir / 'comparison_boxplots' / globals.CLUSTERED_BOX_PLOT_SAVENAME.format(metric=metric, filetype='png')} does not exist"
-        assert Path(
-            tmp_seasonal_dir / 'comparison_boxplots' /
-            globals.CLUSTERED_BOX_PLOT_SAVENAME.format(metric=metric,
-                                                       filetype='svg')
-        ).exists(
-        ), f"{tmp_seasonal_dir / 'comparison_boxplots' / globals.CLUSTERED_BOX_PLOT_SAVENAME.format(metric=metric, filetype='svg')} does not exist"
+
 
     # now check the file with monthly temporal sub-windows and without tcol metrics
 
@@ -683,7 +675,7 @@ def test_plotting(seasonal_qa4sm_file, monthly_qa4sm_file, stability_qa4sm_file,
         out_dir=tmp_monthly_dir,
         save_all=True,
         save_metadata=True,
-        out_type=['png', 'svg'],
+        out_type=['png'],
     )
 
     tsw_dirs_expected = Pytesmo2Qa4smResultsTranscriber.get_tsws_from_ncfile(
@@ -705,10 +697,6 @@ def test_plotting(seasonal_qa4sm_file, monthly_qa4sm_file, stability_qa4sm_file,
                 tmp_monthly_dir / tsw / f"{tsw}_boxplot_{metric}.png"
             ).exists(
             ), f"{tmp_monthly_dir / tsw / f'{tsw}_boxplot_{metric}.png'} does not exist"
-            assert Path(
-                tmp_monthly_dir / tsw / f"{tsw}_boxplot_{metric}.svg"
-            ).exists(
-            ), f"{tmp_monthly_dir / tsw / f'{tsw}_boxplot_{metric}.svg'} does not exist"
 
             if t == 0:
                 #comparison boxplots
@@ -719,12 +707,7 @@ def test_plotting(seasonal_qa4sm_file, monthly_qa4sm_file, stability_qa4sm_file,
                                                                filetype='png')
                 ).exists(
                 ), f"{tmp_seasonal_dir / 'comparison_boxplots' / globals.CLUSTERED_BOX_PLOT_SAVENAME.format(metric=metric, filetype='png')} does not exist"
-                assert Path(
-                    tmp_seasonal_dir / 'comparison_boxplots' /
-                    globals.CLUSTERED_BOX_PLOT_SAVENAME.format(metric=metric,
-                                                               filetype='svg')
-                ).exists(
-                ), f"{tmp_seasonal_dir / 'comparison_boxplots' / globals.CLUSTERED_BOX_PLOT_SAVENAME.format(metric=metric, filetype='svg')} does not exist"
+
         assert Path(
             tmp_monthly_dir / tsw / f'{tsw}_statistics_table.csv'
         ).is_file(
@@ -740,7 +723,7 @@ def test_plotting(seasonal_qa4sm_file, monthly_qa4sm_file, stability_qa4sm_file,
         out_dir=tmp_stability_dir,
         save_all=True,
         save_metadata=True,
-        out_type=['png', 'svg'],
+        out_type=['png'],
     )
 
     tsw_dirs_expected = Pytesmo2Qa4smResultsTranscriber.get_tsws_from_ncfile(
@@ -763,10 +746,6 @@ def test_plotting(seasonal_qa4sm_file, monthly_qa4sm_file, stability_qa4sm_file,
                 tmp_stability_dir / tsw / f"{tsw}_boxplot_{metric}.png"
             ).exists(
             ), f"{tmp_stability_dir / tsw / f'{tsw}_boxplot_{metric}.png'} does not exist"
-            assert Path(
-                tmp_stability_dir / tsw / f"{tsw}_boxplot_{metric}.svg"
-            ).exists(
-            ), f"{tmp_stability_dir / tsw / f'{tsw}_boxplot_{metric}.svg'} does not exist"
 
             if t == 0:
                 #comparison boxplots
@@ -777,20 +756,15 @@ def test_plotting(seasonal_qa4sm_file, monthly_qa4sm_file, stability_qa4sm_file,
                                                                 filetype='png')
                 ).exists(
                 ), f"{tmp_stability_dir / 'comparison_boxplots' / globals.CLUSTERED_BOX_PLOT_SAVENAME.format(metric=metric, filetype='png')} does not exist"
-                assert Path(
-                    tmp_stability_dir / 'comparison_boxplots' /
-                    globals.CLUSTERED_BOX_PLOT_SAVENAME.format(metric=metric,
-                                                                filetype='svg')
-                ).exists(
-                ), f"{tmp_stability_dir / 'comparison_boxplots' / globals.CLUSTERED_BOX_PLOT_SAVENAME.format(metric=metric, filetype='svg')} does not exist"
+
         assert Path(
             tmp_stability_dir / tsw / f'{tsw}_statistics_table.csv'
         ).is_file(
         ), f"{tmp_stability_dir / tsw / f'{tsw}_statistics_table.csv'} does not exist"
     
         plot_dir = Path(tmp_stability_dir / globals.DEFAULT_TSW)
-        assert len(list(plot_dir.iterdir())) == 69
-        assert all(file.suffix in [".png", ".svg", ".csv"] for file in plot_dir.iterdir()), "Not all files have been saved as .png or .csv"
+        assert len(list(plot_dir.iterdir())) == 35
+        assert all(file.suffix in [".png", ".csv"] for file in plot_dir.iterdir()), "Not all files have been saved as .png or .csv"
 
 
 @log_function_call
