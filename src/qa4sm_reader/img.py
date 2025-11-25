@@ -438,6 +438,8 @@ class QA4SMImg(object):
                                       "metric": Var.metric,
                                       "metric_ds": Var.metric_ds,
                                       "other_ds": Var.other_ds,
+                                      "ref_ds": Var.ref_ds,
+                                      "sref_ds": Var.sref_ds,
                                   }):
             values = ci.values
             values.columns = [ci.bound]
@@ -451,7 +453,7 @@ class QA4SMImg(object):
         where the dataset with id=id is the metric dataset.
 
         Parameters
-        ----------
+        ----------        return cis
         metric : str
             A metric that is in the file (e.g. n_obs, R, ...)
         id: int
@@ -508,12 +510,10 @@ class QA4SMImg(object):
                             ds_name['pretty_version'], o,
                             other_ds['short_name'],
                             other_ds['pretty_version']))
-                unit_ref = self.datasets.ref['short_name']
-                _, _, _, scl_meta = Var.get_varmeta()
+                _, _, _, scl_meta, _ = Var.get_varmeta()
+                um = globals._metric_description[metric].format(self.datasets.ref['mu'])
                 if scl_meta:
-                    unit_ref = scl_meta[1]['short_name']
-                um = globals._metric_description[metric].format(
-                    globals.get_metric_units(unit_ref))
+                    um = globals._metric_description[metric].format(scl_meta[1]['mu'])
                 metric_def = f"{globals._metric_name[metric]} {um}"
 
                 var_stats.extend([metric_def, Var.g])
@@ -550,7 +550,7 @@ class QA4SMImg(object):
         stats_df.set_index('Metric', inplace=True)
         stats_df.sort_values(by='Group', inplace=True)
         # format the numbers for display
-        stats_df = stats_df.applymap(_format_floats)
+        stats_df = stats_df.map(_format_floats)
         stats_df.drop(labels='Group', axis='columns', inplace=True)
 
         return stats_df

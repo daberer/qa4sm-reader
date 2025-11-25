@@ -24,7 +24,7 @@ no_print_period = ["bulk"] # List of period names which should not be printed in
 
 dpi_min = 100  # Resolution in which plots are going to be rendered.
 dpi_max = 200
-title_pad = 12  # Padding below the title in points. default padding is matplotlib.rcParams['axes.titlepad'] = 6.0
+title_pad = 12.0  # Padding below the title in points. default padding is matplotlib.rcParams['axes.titlepad'] = 6.0
 data_crs = ccrs.PlateCarree()  # Default map projection. use one of
 legend_alpha = 0.7
 ci_alpha = 0.4
@@ -32,6 +32,7 @@ ci_alpha = 0.4
 palette = sns.color_palette("Set2") #seaborn color palette used for dataset combination --> colors.py, colorblindfriendly options "Set2", "Dark2", "colorblind", ("Paired" not really useable in this case)
 exclude_from_palette = [6] # index of colors which you want removed from the set (depends on n_colors), for example 6 for "Set2" due to it just being not so nice to look at
 color_palette_combinations = [c for i, c in enumerate(palette) if i not in exclude_from_palette]
+color_palette_combinations_2 = sns.color_palette("Dark2") #if more combinations than len(color_palette_combinations)
 
 # === font defaults ===
 fontsize_title = 18
@@ -41,6 +42,7 @@ fontsize_legend = 12
 
 # === Aggregate subplots defaults ===
 n_col_agg = 2
+max_subplots = 20
 
 # === axis defaults ===
 ax_left = 0.2
@@ -60,7 +62,7 @@ map_ax_height = 0.75
 
 cax_width =0.03
 
-resolution_th = [5, 30] # If one of the axis has an extent [°] below the thresholds change to finer resolution 
+resolution_th = [5, 30] # If one of the axis has an extent [°] below the thresholds change to finer resolution
 naturalearth_resolution = ["10m",'50m','110m']  # One of '10m', '50m' and '110m'. Finer resolution slows down plotting. see https://www.naturalearthdata.com/
 crs = ccrs.PlateCarree(
 )  # projection. Must be a class from cartopy.crs. Note, that plotting labels does not work for most projections.
@@ -77,6 +79,11 @@ map_land_color = "#E7E2D6"
 map_water_color = "#e0f7fa"
 
 # === boxplot_basic defaults ===
+metadata_max_boxes = 90
+aggregated_max_boxes = 30
+comparison_max_boxes = 90
+metadata_min_samples = 5
+
 boxplot_height = 7 #$ increased by 1 to house logo
 boxplot_width = 2.1  # times (n+1), where n is the number of boxes.
 
@@ -84,6 +91,8 @@ orient_th = 0 # If more number of bins > orient_th change to horizontal plot
 
 boxplot_height_horizontal = 7.5
 boxplot_width_horizontal = 12.5
+
+n_boxplots_in_row = 5
 
 bin_th = 2
 meta_bin_th = 15 # Above the threshold the figure height gets changes dynamically relative to # of bins
@@ -98,9 +107,13 @@ period_bin_th = 6 # Above the threshold the figure height gets changes dynamical
 boxplot_edgecolor = "#000000" # color of the edgeline of the boxplot
 boxplot_edgewidth = 1 # width of edgeline of boxplot
 cap_factor = 2/3
+
+boxplot_new_coloring = True
 hatch_linewidth = 1.5
 num_hatches = 30
 boxplot_printnumbers = True  # Print 'median', 'nObs', 'stdDev' to the boxplot_basic.
+
+bp_height_exponent = 3/4 # exponent determining how the (non-metadata-)boxplot grows with increasing axes rows
 
 #TODO: remove eventually, as watermarlk string no longer needed
 # === watermark defaults ===
@@ -149,7 +162,7 @@ leg_loc_dict = {
     "center": 10} # Dictionary mapping legend location to corresponding numbers
 
 pos_logo_lut = {f"{i}_{j}_{k}":leg_loc_dict[f"{j} {k}"] for i in rel_to_plot for j in va_l for k in ha_l}
-leg_loc_forbidden = [0, 6, 7, 8, 9, 10, pos_logo_lut[logo_position]] # Positions where no legend placement is allowed
+leg_loc_forbidden = [0, 5, 6, 7, 8, 9, 10, pos_logo_lut[logo_position]] # Positions where no legend placement is allowed
 
 # === filename template ===
 ds_fn_templ = "{i}-{ds}.{var}"
@@ -194,10 +207,9 @@ status_replace = {
 def get_status_colors():
     # function to get custom cmap for calculation errors
     # limited to 14 different error entries to produce distinct colors
-    cmap = cl.ListedColormap(matplotlib.colormaps['Set3'].colors[:len(status) - 2])
-    colors = [cmap(i) for i in range(cmap.N)]
-    colors.insert(0, (0, 0.66666667, 0.89019608, 1.0))
-    colors.insert(0, (0.45882353, 0.08235294, 0.11764706, 1.0))
+    colors = list(colorcet.m_CET_L18(np.linspace(0.25,1,len(status)-2)))
+    colors.insert(0, (188/256, 206/256, 217/256, 1.0)) # #bcced9
+    colors.insert(0, (40/256, 0, 0, 1.0))
     cmap = cl.ListedColormap(colors=colors)
     return cmap
 
@@ -226,7 +238,7 @@ _cclasses_old = {
         'PuOr'
     ]  # diverging colormap for slopeURMSD
 }
-    
+
 # new cclasses
 _cclasses_new = {
     'div_better': colorcet.m_CET_D1A_r,  # diverging: 1 good, 0 special, -1 bad (pearson's R, spearman's rho')
@@ -243,7 +255,6 @@ _cclasses_new = {
 }
 _cclasses = _cclasses_new
 
-# TODO Update this
 _colormaps = {  # from /qa4sm/validator/validation/graphics.py
     'R': _cclasses['div_better'],
     'p_R': _cclasses['seq_worse'],
@@ -407,6 +418,51 @@ _metric_description = {  # from /qa4sm/validator/validation/graphics.py
     'slopeURMSD': ' in {} per decade',
     'slopeBIAS': ' in {} per decade',
 }
+
+# units for all datasets
+def get_metric_units(dataset, raise_error=False):
+    # function to get m.u. with possibility to raise error
+    _metric_units = {  # from /qa4sm/validator/validation/graphics.py
+        'ISMN': 'm³/m³',
+        'C3S': 'm³/m³',  # old name
+        'C3S_combined': 'm³/m³',
+        'C3S_active': '% saturation',
+        'C3S_passive': 'm³/m³',
+        'C3S_rzsm': 'm³/m³',
+        'GLDAS': 'm³/m³',
+        'ASCAT': '% saturation',
+        'SMAP': 'm³/m³',   # old name
+        'SMAP_L3': 'm³/m³',
+        'ERA5': 'm³/m³',
+        'ERA5_LAND': 'm³/m³',
+        'ESA_CCI_SM_active': '% saturation',
+        'ESA_CCI_SM_combined': 'm³/m³',
+        'ESA_CCI_SM_passive': 'm³/m³',
+        'ESA_CCI_RZSM': 'm³/m³',
+        'SMOS': 'm³/m³',   # old name
+        'SMOS_IC': 'm³/m³',
+        'CGLS_CSAR_SSM1km': '% saturation',
+        'CGLS_SCATSAR_SWI1km': '% saturation',
+        'SMOS_L3': 'm³/m³',
+        'SMOS_L2': 'm³/m³',
+        'SMAP_L2': 'm³/m³',
+        'SMOS_SBPCA': 'm³/m³',
+    }
+
+    unit = _metric_units.get(dataset)
+
+    if unit is None:
+        if raise_error:
+            raise KeyError(f"The dataset '{dataset}' has not been specified in {__name__}.")
+        else:
+            warnings.warn(
+                f"The dataset '{dataset}' has not been specified in {__name__}. "
+                "Set 'raise_error' to True to raise an exception for this case.",
+                UserWarning
+            )
+            return "n.a."
+
+    return unit
 
 COMMON_METRICS = {
     'R': 'Pearson\'s r',

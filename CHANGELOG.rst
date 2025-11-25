@@ -4,7 +4,28 @@ Changelog
 
 Unreleased changes in master branch
 ===================================
--
+
+Version 0.12.1
+==============
+- Bugfix comparison module boxplot creation
+
+Version 0.12
+============
+- Standardized plots with unified sizing, fonts, labels, and colorblind-safe palettes
+- Streamlined titles by removing repetitive text and relocating supplementary details
+- Fixed dataset combinations to correctly display all possible pairs
+- Refined UI elements including logos, text wrapping, and legend designs
+- Pin netcdf4 to <1.7.3
+
+Version 0.11.6
+==============
+- Bugfix creation of comparison mapplot
+
+Version 0.11.5
+==============
+- Update build.yml
+- Fix comparison module
+- Results with val_is_scattered_data == 'True' rendered as point data in plots
 
 Version 0.11.4
 ==============
