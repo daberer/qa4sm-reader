@@ -630,6 +630,8 @@ def mapplot(
         except:
             cmap = globals._colormaps[
                 metric.split('_')[0] if '_' in metric else metric]
+    else:
+        cmap = colormap
     # if not colormap:
     #     cmap = globals._colormaps[metric]
     # else:
@@ -721,13 +723,13 @@ def mapplot(
 
     else:  # mapplot
         if not plot_extent:
-            plot_extent = get_plot_extent(df[column_name],
+            plot_extent = get_plot_extent(df,
                                           grid_stepsize=ref_grid_stepsize,
                                           grid=True)
         if isinstance(ref_grid_stepsize, np.ndarray):
             ref_grid_stepsize = ref_grid_stepsize[0]
         zz, zz_extent, origin = geotraj_to_geo2d(
-            df[column_name], grid_stepsize=ref_grid_stepsize)  # prep values
+            df, grid_stepsize=ref_grid_stepsize)  # prep values
         im = ax.imshow(zz,
                        cmap=cmap,
                        vmin=v_min,
@@ -762,15 +764,17 @@ def mapplot(
         #                      label=label,
         #                      diff_map=diff_map,
         #                      scl_short=scl_short)
+
         try:
-            fig, im = _make_cbar(fig,
-                                 ax,
-                                 im,
-                                 ref_short,
-                                 metric,
-                                 label=label,
-                                 diff_map=diff_map,
-                                 scl_short=scl_short)
+            fig, im, cax = _make_cbar(fig,
+                                      ax,
+                                      im,
+                                      ref_short,
+                                      metric,
+                                      label=label,
+                                      diff_map=diff_map,
+                                      scl_short=scl_short)
+            d = 1
         except:
             fig, im = _make_cbar(fig,
                                  ax,
@@ -780,6 +784,14 @@ def mapplot(
                                  label=label,
                                  diff_map=diff_map,
                                  scl_short=scl_short)
+            fig, im, cax = _make_cbar(fig,
+                                      ax,
+                                      im,
+                                      ref_short,
+                                      metric.split('_')[0],
+                                      label=label,
+                                      diff_map=diff_map,
+                                      scl_short=scl_short)
 
         if colorbar_ticks_fontsize:
             # ax.tick_params(labelsize=colorbar_ticks_fontsize)
@@ -798,3 +810,5 @@ def mapplot(
         ax.set_title(title)
     plt.savefig(f"{output_dir}/{column_name}_map.png", dpi=300)
     return fig, ax
+
+
