@@ -62,7 +62,6 @@ def sns_custom_boxplot(*args, **kwargs):
         kwargs_no_legend = kwargs.copy()
         kwargs_no_legend['legend'] = False
         ax = sns.boxplot(*args, **kwargs_no_legend)
-    ax = sns.boxplot(*args, **kwargs)
 
     # Manually apply QA4SM styling to boxes
     for patch in getattr(ax, "patches", []):  # box artists
@@ -2013,7 +2012,7 @@ def aggregate_subplots(to_plot: dict, funct, **kwargs):
     sub_n = len(to_plot.keys())
     if "n_bins" not in kwargs.keys():
         kwargs["n_bins"] = 1
-    if kwargs["n_bins"]*len(to_plot[list(to_plot.keys())[0]].columns) > globals.aggregated_max_boxes:
+    if len(set(to_plot[list(to_plot.keys())[0]].columns)) > globals.aggregated_max_boxes:
         raise PlotterError(
             f"There are too many boxes (categories * dataset_combinations: {len(to_plot)}*{len(to_plot[list(to_plot.keys())[0]].columns)} " \
             f"= {len(to_plot)*len(to_plot[list(to_plot.keys())[0]].columns)}). A maximum of {globals.aggregated_max_boxes} boxes " \
@@ -2027,6 +2026,7 @@ def aggregate_subplots(to_plot: dict, funct, **kwargs):
             UserWarning
         )
         return None, None
+
     if sub_n == 1:
         for n, (bin_label, data) in enumerate(to_plot.items()):
             # fig = plt.figure()
@@ -2174,9 +2174,6 @@ def bplot_catplot(to_plot,
 
     unique_combos = to_plot.set_index(np.arange(to_plot.index.size))["Dataset"].unique()
     palette = get_palette_for(unique_combos)
-    if len(to_plot["values"]) == int(to_plot["values"].isna().sum()):
-        raise PlotterError(f"There are no valid measurements for this metric ({axis_name}) metadata ({metadata_name}) combination "
-                         "therefore the creation of a plot is skipped.")
 
     box = sns_custom_boxplot(
         x=x,
@@ -2264,8 +2261,12 @@ def bplot_catplot(to_plot,
     axis.set_axisbelow(True)
     axis.spines['right'].set_visible(False)
     axis.spines['top'].set_visible(False)
-    axis.legend(loc=th.best_legend_pos_exclude_list(axis),
-                fontsize=globals.fontsize_legend,
+    handles, labels = axis.get_legend_handles_labels() #to deal with duplicate legend entries
+    by_label = dict(zip(labels, handles))
+    axis.legend(by_label.values(), 
+                by_label.keys(),
+                loc=th.best_legend_pos_exclude_list(axis), 
+                fontsize=globals.fontsize_legend, 
                 ncol=(len(axis.get_legend_handles_labels()[0])-1)//5 + 1)
 
     if return_figax:
