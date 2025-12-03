@@ -8,14 +8,14 @@ import shutil
 import tempfile
 import sys
 from pathlib import Path
-import zarr
+import dask
 from qa4sm_reader.intra_annual_temp_windows import TemporalSubWindowsCreator, InvalidTemporalSubWindowError
 from qa4sm_reader.globals import    METRICS, TC_METRICS, STABILITY_METRICS, NON_METRICS, METADATA_TEMPLATE, \
                                     IMPLEMENTED_COMPRESSIONS, ALLOWED_COMPRESSION_LEVELS, \
                                     INTRA_ANNUAL_METRIC_TEMPLATE, INTRA_ANNUAL_TCOL_METRIC_TEMPLATE, \
                                     TEMPORAL_SUB_WINDOW_SEPARATOR, DEFAULT_TSW, TEMPORAL_SUB_WINDOW_NC_COORD_NAME, \
                                     MAX_NUM_DS_PER_VAL_RUN, DATASETS, OLD_NCFILE_SUFFIX, status_replace
-
+import asyncio
 
 class TemporalSubWindowMismatchError(Exception):
     '''Exception raised when the temporal sub-windows provided do not match the ones present in the provided netCDF file.'''
@@ -790,63 +790,150 @@ class Pytesmo2Qa4smResultsTranscriber:
         return sort_tsws(tsws)
 
 
-class Qa4smResults2ZarrTranscriber:
-    """
-    Transcriber for converting QA4SM results to Zarr format.
+import psutil
+logfilepath = r'/home/daberer/Documents/logfile.txt'
 
-    Optimized for direct saving of datasets for use with Datashader.
-    """
+process = psutil.Process()
+
+
+def write_log(msg):
+    """Append a single message to the logfile."""
+    with open(logfilepath, 'a') as f:
+        f.write(msg + '\n')
+
+
+def log_resources(tag):
+    """Write CPU and memory usage to logfile."""
+    cpu = psutil.cpu_percent(interval=None)
+    virt = psutil.virtual_memory()
+    rss = process.memory_info().rss / 1024**2
+    write_log(
+        f"[RES] {tag} CPU {cpu} percent RAM used {virt.percent} percent "
+        f"Avail {virt.available / 1024**2:.1f} MB ProcRSS {rss:.1f} MB"
+    )
+
+
+class Qa4smResults2ZarrTranscriber:
+    """Transcriber for converting QA4SM results to Zarr format."""
 
     def __init__(self, dataset, nc_filepath, out_dir):
-        """
-        Initialize the transcriber.
+        write_log("[ZARR-INIT] Creating transcriber")
+        log_resources("init")
 
-        Parameters
-        ----------
-        dataset : xarray.Dataset
-            The in-memory dataset to be converted
-        nc_filepath : Path or str
-            Original image filepath (used for naming output)
-        out_dir : Path or str
-            Directory where Zarr files will be saved
-        """
         self.ds = dataset
         self.nc_filepath = Path(nc_filepath)
         self.out_dir = Path(out_dir)
         self.zarr_filepath = self.out_dir / f"{self.nc_filepath.stem}.zarr"
 
+        write_log(f"[ZARR-INIT] Output {self.zarr_filepath}")
+        log_resources("after_paths")
+
     def save_zarr(self):
-        """
-        Save data as Zarr with memory-efficient streaming.
-        """
-        from dask.diagnostics import ProgressBar
-        import dask
+        # recreate logfile at start of run
+        with open(logfilepath, 'w'):
+            pass
 
+        write_log("=" * 60)
+        write_log(f"[ZARR] Starting save at {time.strftime('%H:%M:%S')}")
+        write_log("=" * 60)
+
+        start_time = time.time()
+        log_resources("start")
+
+        # Ensure output directory exists
+        self.out_dir.mkdir(parents=True, exist_ok=True)
+        log_resources("after_mkdir")
+
+        # Remove old zarr
+        if self.zarr_filepath.exists():
+            write_log("[ZARR] Removing existing Zarr...")
+            shutil.rmtree(self.zarr_filepath)
+            log_resources("after_rm_old")
+
+        # Filter variables
         variables_to_export = [
-            x for x in self.ds.data_vars if x not in ['_row_size', 'gpi']
+            x for x in self.ds.data_vars
+            if x not in ['_row_size', 'gpi']
         ]
+        write_log(f"[ZARR] Exporting {len(variables_to_export)} variables")
+        log_resources("after_var_filter")
 
-        print(f"Saving {len(variables_to_export)} variables to Zarr...")
-
+        # Create subset
         ds_subset = self.ds[variables_to_export]
+        log_resources("subset_created")
 
-        # Ensure proper chunking (prevents loading entire dataset)
-        if not ds_subset.chunks:
-            # Auto-chunk if not already chunked
-            ds_subset = ds_subset.chunk('auto')
+        # Chunk sizes
+        chunk_sizes = {var: ds_subset[var].shape for var in variables_to_export}
+        log_resources("chunks_prepared")
 
-        # Configure Dask for better performance
-        with dask.config.set(scheduler='threads', num_workers=4):
-            with ProgressBar():
-                ds_subset.to_zarr(
-                    self.zarr_filepath,
-                    mode='w',
-                    consolidated=True,
-                    compute=True
-                )
+        # Write each var separately
+        for i, var_name in enumerate(variables_to_export, 1):
+            var_start = time.time()
+            write_log(f"[ZARR] [{i}/{len(variables_to_export)}] {var_name}")
+            log_resources(f"before_compute_{var_name}")
 
-        print(f"Saved Zarr to {self.zarr_filepath}")
+            var_data = ds_subset[var_name]
+
+            # Compute
+            with dask.config.set(scheduler='synchronous'):
+                var_computed = var_data.compute()
+            log_resources(f"after_compute_{var_name}")
+
+            # Single variable dataset
+            ds_single = xr.Dataset(
+                {var_name: var_computed},
+                coords=ds_subset.coords
+            )
+
+            # Write
+            mode = 'w' if i == 1 else 'a'
+            ds_single.to_zarr(
+                str(self.zarr_filepath),
+                mode=mode,
+                consolidated=False,
+                safe_chunks=False,
+                encoding={var_name: {'chunks': chunk_sizes[var_name]}}
+            )
+            log_resources(f"after_write_{var_name}")
+
+            var_elapsed = time.time() - var_start
+            write_log(f"[ZARR] {var_name} done in {var_elapsed:.2f}s")
+
+        # Consolidate metadata
+        write_log("[ZARR] Consolidating metadata")
+        try:
+            import zarr
+            zarr.consolidate_metadata(str(self.zarr_filepath))
+            write_log("[ZARR] Metadata consolidation OK")
+        except Exception as e:
+            write_log(f"[ZARR] Metadata consolidation error {e}")
+
+        log_resources("after_consolidation")
+
+        # Total size
+        total_size = sum(
+            os.path.getsize(os.path.join(dp, f))
+            for dp, _, fs in os.walk(self.zarr_filepath)
+            for f in fs
+        )
+        log_resources("after_size_calc")
+
+        elapsed = time.time() - start_time
+        write_log("=" * 60)
+        write_log("[ZARR] Complete")
+        write_log(f"[ZARR] Size {total_size / 1024**2:.2f} MB")
+        write_log(f"[ZARR] Time {elapsed:.2f}s")
+        write_log(f"[ZARR] Location {self.zarr_filepath}")
+        write_log("=" * 60)
+
+        log_resources("done")
+
         return self.zarr_filepath
+
+
+
+
+
 
 
 
