@@ -94,6 +94,7 @@ def plot_all(filepath: str,
              save_all: bool = True,
              save_metadata: Union[str, bool] = 'never',
              save_csv: bool = True,
+             save_zarr: bool = True,
              engine: str = 'h5netcdf',
              **plotting_kwargs) -> Tuple[List[str], List[str], List[str], List[str]]:
     """
