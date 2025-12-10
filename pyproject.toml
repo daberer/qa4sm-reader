@@ -37,6 +37,7 @@ dependencies = [
     "numpy",
     "pandas",
     "parse",
+    "psutil",
     "pygeogrids",
     "pyQt5",
     "pytesmo",
