@@ -18,9 +18,6 @@ from qa4sm_reader.globals import    METRICS, TC_METRICS, STABILITY_METRICS, NON_
                                     MAX_NUM_DS_PER_VAL_RUN, DATASETS, OLD_NCFILE_SUFFIX, status_replace
 import logging
 
-log_dir = "/home/daberer/valentina_log"
-os.makedirs(log_dir, exist_ok=True)
-
 # # Configure logging
 # logging.basicConfig(
 #     level=logging.INFO,
