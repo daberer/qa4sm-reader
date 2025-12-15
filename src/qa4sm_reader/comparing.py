@@ -334,7 +334,7 @@ class QA4SMComparison:
         ref_grid_stepsize = self.compared[0].ref_dataset_grid_stepsize
 
         ref = self._check_ref()["short_name"]
-        is_scattered = any([x.ds.attrs.get('val_is_scattered_data') == 'True' for x in self.compared])
+        is_scattered = any([x.ds.attrs.get('val_is_scattered_data') == True for x in self.compared])
         plm.plot_spatial_extent(polys=polys,
                                 ref_points=ref_points,
                                 overlapping=self.overlapping,
@@ -641,7 +641,7 @@ class QA4SMComparison:
             *df.columns) + f"{um}"
 
         # point data case
-        is_scattered = any([x.ds.attrs.get('val_is_scattered_data') == 'True' for x in self.compared])
+        is_scattered = any([x.ds.attrs.get('val_is_scattered_data') == True for x in self.compared])
         fig, axes = plm.mapplot(df.iloc[:, 2],
                                 metric=metric,
                                 ref_short=self.ref['short_name'],

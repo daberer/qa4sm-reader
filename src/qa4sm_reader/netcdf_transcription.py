@@ -23,7 +23,7 @@ import logging
 #     level=logging.INFO,
 #     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
 #     handlers=[
-#         logging.FileHandler("filepath"),
+#        logging.FileHandler("filepath"),
 #         logging.StreamHandler()  # Also print to console
 #     ]
 # )
