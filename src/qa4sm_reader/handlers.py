@@ -385,7 +385,7 @@ class QA4SMVariable():
 
         self.metric, self.g, self.parts = self._parse_varname()
         self.Datasets = QA4SMDatasets(self.attrs)
-        self.attrs["val_is_scattered_data"] = True if self.attrs.get("val_is_scattered_data") \
+        self.attrs["val_is_scattered_data"] = True if self.attrs.get("val_is_scattered_data") == "True" \
             or self.attrs.get(self.attrs.get('val_ref')) in globals.scattered_datasets else False
 
     def initialize(self):
