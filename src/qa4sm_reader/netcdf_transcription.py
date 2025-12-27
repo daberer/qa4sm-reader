@@ -8,7 +8,7 @@ import shutil
 import tempfile
 import sys
 from pathlib import Path
-import dask, zarr, signal
+import subprocess, zarr, json
 import psutil
 from qa4sm_reader.intra_annual_temp_windows import TemporalSubWindowsCreator, InvalidTemporalSubWindowError
 from qa4sm_reader.globals import    METRICS, TC_METRICS, STABILITY_METRICS, NON_METRICS, METADATA_TEMPLATE, \
@@ -805,17 +805,11 @@ class Pytesmo2Qa4smResultsTranscriber:
 
 
 
-log_file_path = Path(
-    __file__).parent.parent / '.logs' / "test_netcdf_transcription.log"
+log_file_path = Path(__file__).parent.parent / '.logs' / "test_netcdf_transcription.log"
 if not log_file_path.parent.exists():
     log_file_path.parent.mkdir(parents=True, exist_ok=True)
 
 process = psutil.Process()
-
-
-
-
-
 
 def log_resources(tag):
     """Write CPU and memory usage to logfile."""
@@ -827,120 +821,335 @@ def log_resources(tag):
         f"Avail {virt.available / 1024**2:.1f} MB ProcRSS {rss:.1f} MB"
     )
 
+# def replace_status_values(arr, replace_map):
+#     """Replace values in an integer array according to a mapping dict."""
+#     result = arr.copy()
+#     for old_val, new_val in replace_map.items():
+#         result[arr == old_val] = new_val
+#     return result
+
 class ZarrTimeoutError(Exception):
     """Custom timeout exception to avoid shadowing built-in TimeoutError."""
     pass
+
+class NetCDFNotFoundError(Exception):
+    """Raised when the NetCDF file does not exist."""
+    pass
+
 
 
 def timeout_handler(signum, frame):
     raise ZarrTimeoutError("Operation timed out")
 
-def replace_status_values(arr, replace_map):
-    """Replace values in an integer array according to a mapping dict."""
-    result = arr.copy()
+
+# ============================================================================
+# SUBPROCESS WORKER SCRIPT (embedded as string)
+# ============================================================================
+
+WORKER_SCRIPT = '''
+import sys
+import json
+import numpy as np
+import xarray as xr
+import dask
+
+def replace_status_values(data_array, replace_map):
+    """Replace values in a DataArray according to a mapping dict.
+
+    Works with the underlying numpy array to avoid xarray indexing limitations.
+    """
+    if not replace_map:
+        return data_array
+
+    # Extract values as numpy array
+    arr = data_array.values.copy()
+
+    # Perform replacement on numpy array (supports n-dimensional boolean indexing)
     for old_val, new_val in replace_map.items():
-        result[arr == old_val] = new_val
-    return result
+        arr[arr == old_val] = new_val
+
+    # Return a new DataArray with the modified values, preserving dims/coords/attrs
+    return xr.DataArray(
+        arr,
+        dims=data_array.dims,
+        coords=data_array.coords,
+        attrs=data_array.attrs,
+        name=data_array.name
+    )
+
+def process_variable(config):
+    nc_path = config["nc_path"]
+    zarr_path = config["zarr_path"]
+    var_name = config["var_name"]
+    mode = config["mode"]
+    include_coords = config["include_coords"]
+    chunk_size = tuple(config["chunk_size"]) if config["chunk_size"] else None
+    is_status_var = config["is_status_var"]
+    status_replace = config.get("status_replace", {})
+    spatial_chunks = config.get("spatial_chunks")  # Optional: {"lat": 500, "lon": 500}
+
+    # Open dataset with chunking for lazy loading
+    chunks = spatial_chunks if spatial_chunks else "auto"
+    ds = xr.open_dataset(nc_path, chunks=chunks)
+
+    var_data = ds[var_name]
+
+    # Compute to load into memory (with synchronous scheduler)
+    with dask.config.set(scheduler="synchronous"):
+        var_computed = var_data.compute()
+
+    # Apply status value replacement if needed (AFTER compute)
+    if is_status_var and status_replace:
+        # Convert status_replace keys to int (JSON serializes dict keys as strings)
+        status_map = {int(k): v for k, v in status_replace.items()}
+        var_computed = replace_status_values(var_computed, status_map)
+
+    # Build dataset for this variable
+    if include_coords:
+        ds_single = xr.Dataset(
+            {var_name: var_computed},
+            coords=ds.coords
+        )
+    else:
+        # For append mode, only include the variable (not coords again)
+        ds_single = xr.Dataset({var_name: var_computed})
+
+    # Prepare encoding
+    encoding = {}
+    if chunk_size:
+        encoding[var_name] = {"chunks": chunk_size}
+
+    # Write to zarr
+    ds_single.to_zarr(
+        zarr_path,
+        mode=mode,
+        zarr_format=3,
+        consolidated=False,
+        safe_chunks=False,
+        encoding=encoding if encoding else None
+    )
+
+    ds.close()
+    print(f"SUCCESS: {var_name}")
+
+if __name__ == "__main__":
+    config = json.loads(sys.argv[1])
+    process_variable(config)
+'''
 
 
 class Qa4smResults2ZarrTranscriber:
-    """Transcriber for converting QA4SM results to Zarr v3 format."""
+    """Transcriber for converting QA4SM results to Zarr v3 format using subprocess isolation.
 
-    def __init__(self, dataset, nc_filepath, out_dir):
+    IMPORTANT: Call save_zarr() only AFTER the NetCDF file has been fully created.
+    This class does NOT wait for file creation - it fails immediately if the file is missing.
+    """
+
+    # Variables larger than this get spatial chunking (50 MB)
+    LARGE_VAR_THRESHOLD = 50 * 1024 * 1024
+
+    # Chunk sizes for spatial dimensions
+    DEFAULT_SPATIAL_CHUNKS = {"lat": 100, "lon": 100}
+
+    def __init__(self, nc_filepath, out_dir):
+        """
+        Initialize transcriber.
+
+        Args:
+            nc_filepath: Path to the NetCDF file (must exist when save_zarr() is called)
+            out_dir: Directory where the Zarr store will be created
+        """
         logging.debug("[ZARR-INIT] Creating transcriber")
         log_resources("init")
 
-        self.ds = dataset
         self.nc_filepath = Path(nc_filepath)
         self.out_dir = Path(out_dir)
         self.zarr_filepath = self.out_dir / f"{self.nc_filepath.stem}.zarr"
+        self.ds = None
 
-        logging.debug(f"[ZARR-INIT] Output {self.zarr_filepath}")
+        logging.debug(f"[ZARR-INIT] Source: {self.nc_filepath}")
+        logging.debug(f"[ZARR-INIT] Output: {self.zarr_filepath}")
         log_resources("after_paths")
 
-    def save_zarr(self):
-        # Clear logfile at start
+    def _validate_netcdf_exists(self):
+        """Check that the NetCDF file exists and is readable. Fail fast if not."""
+        if not self.nc_filepath.exists():
+            raise NetCDFNotFoundError(
+                f"NetCDF file does not exist: {self.nc_filepath}. "
+                f"Ensure the validation process has completed before calling save_zarr()."
+            )
 
+        # Quick validation that file is readable
+        try:
+            with xr.open_dataset(self.nc_filepath) as test_ds:
+                var_count = len(test_ds.data_vars)
+            logging.debug(f"[ZARR] NetCDF validated: {var_count} variables found")
+        except Exception as e:
+            raise NetCDFNotFoundError(
+                f"NetCDF file exists but cannot be opened: {self.nc_filepath}. Error: {e}"
+            )
+
+    def _load_dataset(self):
+        """Load the dataset."""
+        if self.ds is None:
+            logging.debug("[ZARR] Loading dataset...")
+            self.ds = xr.open_dataset(self.nc_filepath, chunks="auto")
+            logging.debug(f"[ZARR] Dataset loaded: {len(self.ds.data_vars)} variables")
+        return self.ds
+
+    def _estimate_variable_size(self, var_name):
+        """Estimate memory size of a variable in bytes."""
+        var = self.ds[var_name]
+        dtype_size = var.dtype.itemsize
+        total_elements = 1
+        for dim_size in var.shape:
+            total_elements *= dim_size
+        return total_elements * dtype_size
+
+    def _get_spatial_chunks(self, var_name):
+        """Determine if variable needs spatial chunking and return chunk dict."""
+        estimated_size = self._estimate_variable_size(var_name)
+
+        if estimated_size > self.LARGE_VAR_THRESHOLD:
+            logging.debug(
+                f"[ZARR] Variable {var_name} is large ({estimated_size / 1024**2:.1f} MB), "
+                f"using spatial chunking"
+            )
+            var_dims = self.ds[var_name].dims
+            chunks = {}
+            for dim in var_dims:
+                if dim in self.DEFAULT_SPATIAL_CHUNKS:
+                    dim_size = self.ds.dims[dim]
+                    chunk_size = min(self.DEFAULT_SPATIAL_CHUNKS[dim], dim_size)
+                    chunks[dim] = chunk_size
+            return chunks if chunks else None
+        return None
+
+    def _run_variable_subprocess(self, config):
+        """Run a subprocess to process a single variable."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+            f.write(WORKER_SCRIPT)
+            script_path = f.name
+
+        try:
+            config_json = json.dumps(config)
+
+            result = subprocess.run(
+                [sys.executable, script_path, config_json],
+                capture_output=True,
+                text=True,
+                timeout=3600
+            )
+
+            if result.returncode != 0:
+                logging.error(f"[ZARR] Subprocess failed for {config['var_name']}")
+                logging.error(f"[ZARR] STDERR: {result.stderr}")
+                raise RuntimeError(f"Failed to process variable {config['var_name']}: {result.stderr}")
+
+            logging.debug(f"[ZARR] Subprocess output: {result.stdout.strip()}")
+            return True
+
+        except subprocess.TimeoutExpired:
+            logging.error(f"[ZARR] Timeout processing variable {config['var_name']}")
+            raise
+        finally:
+            os.unlink(script_path)
+
+    def save_zarr(self):
+        """
+        Convert NetCDF to Zarr format.
+
+        IMPORTANT: The NetCDF file MUST exist before calling this method.
+        This method does NOT wait for file creation.
+
+        Returns:
+            Path to the created Zarr store.
+
+        Raises:
+            NetCDFNotFoundError: If the NetCDF file doesn't exist or is unreadable.
+        """
         logging.debug("=" * 60)
-        logging.debug(f"[ZARR] Starting save at {time.strftime('%H:%M:%S')}")
+        logging.debug(f"[ZARR] Starting save_zarr at {time.strftime('%H:%M:%S')}")
         logging.debug("=" * 60)
 
         start_time = time.time()
         log_resources("start")
 
-        # Ensure output directory exists
+        # ========== STEP 1: Validate NetCDF exists (fail fast) ==========
+        self._validate_netcdf_exists()
+        log_resources("after_validation")
+
+        # ========== STEP 2: Load dataset ==========
+        self._load_dataset()
+        log_resources("after_load_dataset")
+
+        # ========== STEP 3: Prepare output ==========
         self.out_dir.mkdir(parents=True, exist_ok=True)
         log_resources("after_mkdir")
 
-        # Remove old zarr store
         if self.zarr_filepath.exists():
             logging.debug("[ZARR] Removing existing Zarr...")
             shutil.rmtree(self.zarr_filepath)
             log_resources("after_rm_old")
 
-        # Filter variables
+        # ========== STEP 4: Filter variables ==========
         variables_to_export = [
             x for x in self.ds.data_vars
             if x not in ['_row_size', 'gpi']
         ]
-        logging.debug(f"[ZARR] Exporting {len(variables_to_export)} variables")
+        logging.debug(f"[ZARR] Exporting {len(variables_to_export)} variables via subprocesses")
         log_resources("after_var_filter")
 
-        # Create subset
-        ds_subset = self.ds[variables_to_export]
-        log_resources("subset_created")
+        chunk_sizes = {var: list(self.ds[var].shape) for var in variables_to_export}
 
-        # Prepare chunk sizes
-        chunk_sizes = {var: ds_subset[var].shape for var in variables_to_export}
-        log_resources("chunks_prepared")
-
-        # Write variables one at a time (avoids async/dask freezing issues)
+        # ========== STEP 5: Process variables in subprocesses ==========
+        failed_vars = []
         for i, var_name in enumerate(variables_to_export, 1):
             var_start = time.time()
-            logging.debug(f"[ZARR] [{i}/{len(variables_to_export)}] {var_name}")
-            log_resources(f"before_compute_{var_name}")
+            logging.debug(f"[ZARR] [{i}/{len(variables_to_export)}] Processing {var_name} in subprocess...")
+            log_resources(f"before_subprocess_{var_name}")
 
-            
-
-            var_data = ds_subset[var_name]
-            # Check if this is a status variable
-            is_status_var = var_name.startswith('status_')
-            if is_status_var:
-                logging.debug(f"[DEBUG] Variable {var_name} is a status variable - will apply value replacement")
-                var_data = replace_status_values(var_data, status_replace)
-
-            # Compute with synchronous scheduler to avoid freezing
-            with dask.config.set(scheduler='synchronous'):
-                var_computed = var_data.compute()
-            log_resources(f"after_compute_{var_name}")
-
-            # Create single-variable dataset
-            ds_single = xr.Dataset(
-                {var_name: var_computed},
-                coords=ds_subset.coords
-            )
-
-            # Write to zarr v3 format
             mode = 'w' if i == 1 else 'a'
-            ds_single.to_zarr(
-                self.zarr_filepath,
-                mode=mode,
-                zarr_format=3,  # Explicit v3 format
-                consolidated=False,  # We consolidate manually at the end
-                safe_chunks=False,
-                encoding={var_name: {'chunks': chunk_sizes[var_name]}}
-            )
-            log_resources(f"after_write_{var_name}")
+            include_coords = (i == 1)
+            is_status_var = var_name.startswith('status_')
+            spatial_chunks = self._get_spatial_chunks(var_name)
 
-            var_elapsed = time.time() - var_start
-            logging.debug(f"[ZARR] {var_name} done in {var_elapsed:.2f}s")
+            config = {
+                "nc_path": str(self.nc_filepath),
+                "zarr_path": str(self.zarr_filepath),
+                "var_name": var_name,
+                "mode": mode,
+                "include_coords": include_coords,
+                "chunk_size": chunk_sizes[var_name],
+                "is_status_var": is_status_var,
+                "status_replace": {str(k): v for k, v in status_replace.items()},
+                "spatial_chunks": spatial_chunks
+            }
 
-        # Consolidate metadata (v3 compatible - experimental feature)
+            try:
+                self._run_variable_subprocess(config)
+                log_resources(f"after_subprocess_{var_name}")
+
+                var_elapsed = time.time() - var_start
+                logging.debug(f"[ZARR] {var_name} done in {var_elapsed:.2f}s")
+
+            except Exception as e:
+                logging.error(f"[ZARR] Failed to process {var_name}: {e}")
+                failed_vars.append(var_name)
+
+                if i == 1:
+                    raise RuntimeError(f"First variable failed, cannot continue: {e}")
+                continue
+
+        if failed_vars:
+            logging.warning(f"[ZARR] Failed variables: {failed_vars}")
+
+        # ========== STEP 6: Consolidate metadata ==========
         logging.debug("[ZARR] Consolidating metadata")
         self._consolidate_metadata_v3()
         log_resources("after_consolidation")
 
-        # Calculate total size
+        # ========== STEP 7: Report results ==========
         total_size = sum(
             os.path.getsize(os.path.join(dp, f))
             for dp, _, fs in os.walk(self.zarr_filepath)
@@ -953,29 +1162,26 @@ class Qa4smResults2ZarrTranscriber:
         logging.debug("[ZARR] Complete")
         logging.debug(f"[ZARR] Size {total_size / 1024**2:.2f} MB")
         logging.debug(f"[ZARR] Time {elapsed:.2f}s")
+        logging.debug(f"[ZARR] Variables: {len(variables_to_export) - len(failed_vars)}/{len(variables_to_export)}")
         logging.debug(f"[ZARR] Location {self.zarr_filepath}")
         logging.debug("=" * 60)
 
         log_resources("done")
+
+        if self.ds is not None:
+            self.ds.close()
+            self.ds = None
 
         return self.zarr_filepath
 
     def _consolidate_metadata_v3(self):
         """Consolidate metadata using zarr v3 API."""
         try:
-            # v3 uses LocalStore for local filesystem
             store = zarr.storage.LocalStore(self.zarr_filepath)
             zarr.consolidate_metadata(store)
             logging.debug("[ZARR] Metadata consolidation OK")
         except Exception as e:
-            # Consolidation is experimental in v3, so gracefully handle errors
             logging.debug(f"[ZARR] Metadata consolidation skipped: {e}")
-
-
-
-
-
-
 
 
 if __name__ == '__main__':
