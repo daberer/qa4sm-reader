@@ -192,7 +192,6 @@ def plot_all(filepath: str,
 
         if save_zarr:
             zarr_transcriber = Qa4smResults2ZarrTranscriber(
-                dataset=img.ds,
                 nc_filepath=filepath,
                 out_dir=Path(out_dir))
 
