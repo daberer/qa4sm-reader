@@ -1977,3 +1977,4 @@ class QA4SMCompPlotter:
         ]
 
         return cbp_fig.fig
+    

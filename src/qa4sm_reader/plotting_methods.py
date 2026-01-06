@@ -133,17 +133,16 @@ def non_overlapping_markersize(ax, scatter):
 
 def _float_gcd(a, b, atol=1e-04):
     "Greatest common divisor (=groesster gemeinsamer teiler)"
-    scale = 1/atol # Scale to avoid floating point errors more robustly
-    ai = int(round(a*scale))
-    bi = int(round(b*scale))
-    gi = gcd(ai, bi)
-    return gi/scale
+    while abs(b) > atol:
+        a, b = b, a % b
+
+    return a
 
 def _get_grid(a):
     "Find the stepsize of the grid behind a and return the parameters for that grid axis."
     a = np.unique(a)  # get unique values and sort
     das = np.unique(np.diff(a))  # get unique stepsizes and sort
-    if len(das) > 10: # If there are a lot of differing stepsizes no regular grid can be reconstructed
+    if len(das) > 30: # If there are a lot of differing stepsizes no regular grid can be reconstructed
         a_min, a_max, da, len_a = _get_grid_for_irregulars(a, das[0] if das[0]>0.01 else 0.01)
         return a_min, a_max, da, len_a
     da = das[0]  # get smallest stepsize
@@ -1236,7 +1235,7 @@ def get_box_bbox_data(ax, box):
     x1, y1 = np.max(verts_data, axis=0)
     return x0, y0, x1, y1
 
-def triangle_hatching(ax, box, dist=0.5, direction="up", zorder=-1, linewidth=1, color="k", alpha=1):
+def triangle_hatching(ax, box, dist=0.5, direction="up", zorder=-1, linewidth=1, color="k", alpha=1, pad=0.01):
     """
     Draw triangular hatching inside a box patch using a LineCollection (fast).
 
@@ -1266,6 +1265,9 @@ def triangle_hatching(ax, box, dist=0.5, direction="up", zorder=-1, linewidth=1,
         Color of the hatch lines.
     alpha : float, default=1
         Opacity of the hatch lines (0=transparent, 1=opaque).
+    pad : float, default=0.01
+        Determines padding between sides of boxplot and start of triangle hatching 
+        (boxplot rectangle gets reduced on all sides) to prevent overlapping. (0-0.49)
 
     Notes
     -----
@@ -1275,7 +1277,9 @@ def triangle_hatching(ax, box, dist=0.5, direction="up", zorder=-1, linewidth=1,
     """
 
     # Get bounding box in data coordinates
-    x0, y0, x1, y1 = get_box_bbox_data(ax, box)
+    x0_box, y0_box, x1_box, y1_box = get_box_bbox_data(ax, box)
+    x0, y0, x1, y1 = x0_box + (x1_box-x0_box)*pad, y0_box + (y1_box-y0_box)*pad, x1_box - (x1_box-x0_box)*pad, y1_box - (y1_box-y0_box)*pad
+    print(x0, y0, x1, y1)
     lines = []
 
     if direction in ("up", "down"):
