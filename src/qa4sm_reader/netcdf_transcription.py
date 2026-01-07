@@ -16,20 +16,6 @@ from qa4sm_reader.globals import    METRICS, TC_METRICS, STABILITY_METRICS, NON_
                                     INTRA_ANNUAL_METRIC_TEMPLATE, INTRA_ANNUAL_TCOL_METRIC_TEMPLATE, \
                                     TEMPORAL_SUB_WINDOW_SEPARATOR, DEFAULT_TSW, TEMPORAL_SUB_WINDOW_NC_COORD_NAME, \
                                     MAX_NUM_DS_PER_VAL_RUN, DATASETS, OLD_NCFILE_SUFFIX, status_replace
-import logging
-
-# # Configure logging
-# logging.basicConfig(
-#     level=logging.INFO,
-#     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-#     handlers=[
-#        logging.FileHandler("filepath"),
-#         logging.StreamHandler()  # Also print to console
-#     ]
-# )
-
-logger = logging.getLogger(__name__)
-
 
 class TemporalSubWindowMismatchError(Exception):
     '''Exception raised when the temporal sub-windows provided do not match the ones present in the provided netCDF file.'''
@@ -805,10 +791,6 @@ class Pytesmo2Qa4smResultsTranscriber:
 
 
 
-log_file_path = Path(__file__).parent.parent / '.logs' / "test_netcdf_transcription.log"
-if not log_file_path.parent.exists():
-    log_file_path.parent.mkdir(parents=True, exist_ok=True)
-
 process = psutil.Process()
 
 def log_resources(tag):
@@ -816,7 +798,7 @@ def log_resources(tag):
     cpu = psutil.cpu_percent(interval=None)
     virt = psutil.virtual_memory()
     rss = process.memory_info().rss / 1024**2
-    logging.debug(
+    print(
         f"[RES] {tag} CPU {cpu} percent RAM used {virt.percent} percent "
         f"Avail {virt.available / 1024**2:.1f} MB ProcRSS {rss:.1f} MB"
     )
@@ -886,11 +868,13 @@ def process_variable(config):
     chunk_size = tuple(config["chunk_size"]) if config["chunk_size"] else None
     is_status_var = config["is_status_var"]
     status_replace = config.get("status_replace", {})
-    spatial_chunks = config.get("spatial_chunks")  # Optional: {"lat": 500, "lon": 500}
 
     # Open dataset with chunking for lazy loading
-    chunks = spatial_chunks if spatial_chunks else "auto"
+    chunks = "auto"
     ds = xr.open_dataset(nc_path, chunks=chunks)
+
+    if 'tsw' in ds.dims:
+        ds = ds.sel(tsw='bulk')
 
     var_data = ds[var_name]
 
@@ -945,12 +929,6 @@ class Qa4smResults2ZarrTranscriber:
     This class does NOT wait for file creation - it fails immediately if the file is missing.
     """
 
-    # Variables larger than this get spatial chunking (50 MB)
-    LARGE_VAR_THRESHOLD = 50 * 1024 * 1024
-
-    # Chunk sizes for spatial dimensions
-    DEFAULT_SPATIAL_CHUNKS = {"lat": 100, "lon": 100}
-
     def __init__(self, nc_filepath, out_dir):
         """
         Initialize transcriber.
@@ -959,7 +937,7 @@ class Qa4smResults2ZarrTranscriber:
             nc_filepath: Path to the NetCDF file (must exist when save_zarr() is called)
             out_dir: Directory where the Zarr store will be created
         """
-        logging.debug("[ZARR-INIT] Creating transcriber")
+        print("[ZARR-INIT] Creating transcriber")
         log_resources("init")
 
         self.nc_filepath = Path(nc_filepath)
@@ -967,8 +945,8 @@ class Qa4smResults2ZarrTranscriber:
         self.zarr_filepath = self.out_dir / f"{self.nc_filepath.stem}.zarr"
         self.ds = None
 
-        logging.debug(f"[ZARR-INIT] Source: {self.nc_filepath}")
-        logging.debug(f"[ZARR-INIT] Output: {self.zarr_filepath}")
+        print(f"[ZARR-INIT] Source: {self.nc_filepath}")
+        print(f"[ZARR-INIT] Output: {self.zarr_filepath}")
         log_resources("after_paths")
 
     def _validate_netcdf_exists(self):
@@ -983,7 +961,7 @@ class Qa4smResults2ZarrTranscriber:
         try:
             with xr.open_dataset(self.nc_filepath) as test_ds:
                 var_count = len(test_ds.data_vars)
-            logging.debug(f"[ZARR] NetCDF validated: {var_count} variables found")
+            print(f"[ZARR] NetCDF validated: {var_count} variables found")
         except Exception as e:
             raise NetCDFNotFoundError(
                 f"NetCDF file exists but cannot be opened: {self.nc_filepath}. Error: {e}"
@@ -992,38 +970,15 @@ class Qa4smResults2ZarrTranscriber:
     def _load_dataset(self):
         """Load the dataset."""
         if self.ds is None:
-            logging.debug("[ZARR] Loading dataset...")
+            print("[ZARR] Loading dataset...")
             self.ds = xr.open_dataset(self.nc_filepath, chunks="auto")
-            logging.debug(f"[ZARR] Dataset loaded: {len(self.ds.data_vars)} variables")
+            
+            # Select tsw dimension if it exists
+            if 'tsw' in self.ds.dims:
+                self.ds = self.ds.sel(tsw=DEFAULT_TSW)
+            
+            print(f"[ZARR] Dataset loaded: {len(self.ds.data_vars)} variables")
         return self.ds
-
-    def _estimate_variable_size(self, var_name):
-        """Estimate memory size of a variable in bytes."""
-        var = self.ds[var_name]
-        dtype_size = var.dtype.itemsize
-        total_elements = 1
-        for dim_size in var.shape:
-            total_elements *= dim_size
-        return total_elements * dtype_size
-
-    def _get_spatial_chunks(self, var_name):
-        """Determine if variable needs spatial chunking and return chunk dict."""
-        estimated_size = self._estimate_variable_size(var_name)
-
-        if estimated_size > self.LARGE_VAR_THRESHOLD:
-            logging.debug(
-                f"[ZARR] Variable {var_name} is large ({estimated_size / 1024**2:.1f} MB), "
-                f"using spatial chunking"
-            )
-            var_dims = self.ds[var_name].dims
-            chunks = {}
-            for dim in var_dims:
-                if dim in self.DEFAULT_SPATIAL_CHUNKS:
-                    dim_size = self.ds.dims[dim]
-                    chunk_size = min(self.DEFAULT_SPATIAL_CHUNKS[dim], dim_size)
-                    chunks[dim] = chunk_size
-            return chunks if chunks else None
-        return None
 
     def _run_variable_subprocess(self, config):
         """Run a subprocess to process a single variable."""
@@ -1042,15 +997,15 @@ class Qa4smResults2ZarrTranscriber:
             )
 
             if result.returncode != 0:
-                logging.error(f"[ZARR] Subprocess failed for {config['var_name']}")
-                logging.error(f"[ZARR] STDERR: {result.stderr}")
+                print(f"[ZARR] Subprocess failed for {config['var_name']}")
+                print(f"[ZARR] STDERR: {result.stderr}")
                 raise RuntimeError(f"Failed to process variable {config['var_name']}: {result.stderr}")
 
-            logging.debug(f"[ZARR] Subprocess output: {result.stdout.strip()}")
+            print(f"[ZARR] Subprocess output: {result.stdout.strip()}")
             return True
 
         except subprocess.TimeoutExpired:
-            logging.error(f"[ZARR] Timeout processing variable {config['var_name']}")
+            print(f"[ZARR] Timeout processing variable {config['var_name']}")
             raise
         finally:
             os.unlink(script_path)
@@ -1068,9 +1023,9 @@ class Qa4smResults2ZarrTranscriber:
         Raises:
             NetCDFNotFoundError: If the NetCDF file doesn't exist or is unreadable.
         """
-        logging.debug("=" * 60)
-        logging.debug(f"[ZARR] Starting save_zarr at {time.strftime('%H:%M:%S')}")
-        logging.debug("=" * 60)
+        print("=" * 60)
+        print(f"[ZARR] Starting save_zarr at {time.strftime('%H:%M:%S')}")
+        print("=" * 60)
 
         start_time = time.time()
         log_resources("start")
@@ -1088,7 +1043,7 @@ class Qa4smResults2ZarrTranscriber:
         log_resources("after_mkdir")
 
         if self.zarr_filepath.exists():
-            logging.debug("[ZARR] Removing existing Zarr...")
+            print("[ZARR] Removing existing Zarr...")
             shutil.rmtree(self.zarr_filepath)
             log_resources("after_rm_old")
 
@@ -1097,7 +1052,7 @@ class Qa4smResults2ZarrTranscriber:
             x for x in self.ds.data_vars
             if x not in ['_row_size', 'gpi']
         ]
-        logging.debug(f"[ZARR] Exporting {len(variables_to_export)} variables via subprocesses")
+        print(f"[ZARR] Exporting {len(variables_to_export)} variables via subprocesses")
         log_resources("after_var_filter")
 
         chunk_sizes = {var: list(self.ds[var].shape) for var in variables_to_export}
@@ -1106,13 +1061,12 @@ class Qa4smResults2ZarrTranscriber:
         failed_vars = []
         for i, var_name in enumerate(variables_to_export, 1):
             var_start = time.time()
-            logging.debug(f"[ZARR] [{i}/{len(variables_to_export)}] Processing {var_name} in subprocess...")
+            print(f"[ZARR] [{i}/{len(variables_to_export)}] Processing {var_name} in subprocess...")
             log_resources(f"before_subprocess_{var_name}")
 
             mode = 'w' if i == 1 else 'a'
             include_coords = (i == 1)
             is_status_var = var_name.startswith('status_')
-            spatial_chunks = self._get_spatial_chunks(var_name)
 
             config = {
                 "nc_path": str(self.nc_filepath),
@@ -1123,7 +1077,6 @@ class Qa4smResults2ZarrTranscriber:
                 "chunk_size": chunk_sizes[var_name],
                 "is_status_var": is_status_var,
                 "status_replace": {str(k): v for k, v in status_replace.items()},
-                "spatial_chunks": spatial_chunks
             }
 
             try:
@@ -1131,10 +1084,10 @@ class Qa4smResults2ZarrTranscriber:
                 log_resources(f"after_subprocess_{var_name}")
 
                 var_elapsed = time.time() - var_start
-                logging.debug(f"[ZARR] {var_name} done in {var_elapsed:.2f}s")
+                print(f"[ZARR] {var_name} done in {var_elapsed:.2f}s")
 
             except Exception as e:
-                logging.error(f"[ZARR] Failed to process {var_name}: {e}")
+                print(f"[ZARR] Failed to process {var_name}: {e}")
                 failed_vars.append(var_name)
 
                 if i == 1:
@@ -1142,10 +1095,10 @@ class Qa4smResults2ZarrTranscriber:
                 continue
 
         if failed_vars:
-            logging.warning(f"[ZARR] Failed variables: {failed_vars}")
+            print(f"[ZARR] Failed variables: {failed_vars}")
 
         # ========== STEP 6: Consolidate metadata ==========
-        logging.debug("[ZARR] Consolidating metadata")
+        print("[ZARR] Consolidating metadata")
         self._consolidate_metadata_v3()
         log_resources("after_consolidation")
 
@@ -1158,13 +1111,13 @@ class Qa4smResults2ZarrTranscriber:
         log_resources("after_size_calc")
 
         elapsed = time.time() - start_time
-        logging.debug("=" * 60)
-        logging.debug("[ZARR] Complete")
-        logging.debug(f"[ZARR] Size {total_size / 1024**2:.2f} MB")
-        logging.debug(f"[ZARR] Time {elapsed:.2f}s")
-        logging.debug(f"[ZARR] Variables: {len(variables_to_export) - len(failed_vars)}/{len(variables_to_export)}")
-        logging.debug(f"[ZARR] Location {self.zarr_filepath}")
-        logging.debug("=" * 60)
+        print("=" * 60)
+        print("[ZARR] Complete")
+        print(f"[ZARR] Size {total_size / 1024**2:.2f} MB")
+        print(f"[ZARR] Time {elapsed:.2f}s")
+        print(f"[ZARR] Variables: {len(variables_to_export) - len(failed_vars)}/{len(variables_to_export)}")
+        print(f"[ZARR] Location {self.zarr_filepath}")
+        print("=" * 60)
 
         log_resources("done")
 
@@ -1179,9 +1132,9 @@ class Qa4smResults2ZarrTranscriber:
         try:
             store = zarr.storage.LocalStore(self.zarr_filepath)
             zarr.consolidate_metadata(store)
-            logging.debug("[ZARR] Metadata consolidation OK")
+            print("[ZARR] Metadata consolidation OK")
         except Exception as e:
-            logging.debug(f"[ZARR] Metadata consolidation skipped: {e}")
+            print(f"[ZARR] Metadata consolidation skipped: {e}")
 
 
 if __name__ == '__main__':
