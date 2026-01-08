@@ -426,9 +426,10 @@ class Pytesmo2Qa4smResultsTranscriber:
 
         return self.transcribed_dataset
 
-    def build_outname(self, root: str, keys: List[Tuple[str]]) -> str:
+
+    def build_outname(self, root: str, keys: List[Tuple[str]]) -> Tuple[Path, Path]:
         """
-        Build the output name for the NetCDF file. Slight alteration of the original function from pytesmo
+        Build the output names for the NetCDF and Zarr files. Slight alteration of the original function from pytesmo
         `pytesmo.validation_framework.results_manager.build_filename`.
 
         Parameters
@@ -440,8 +441,8 @@ class Pytesmo2Qa4smResultsTranscriber:
 
         Returns
         -------
-        str
-            The output name for the NetCDF file.
+        Tuple[Path, Path]
+            The output names for the NetCDF and Zarr files (outname, outname_zarr).
 
         """
 
@@ -454,15 +455,19 @@ class Pytesmo2Qa4smResultsTranscriber:
                     ds_names.append(ds)
 
         fname = "_with_".join(ds_names)
-        ext = "nc"
-        if len(str(Path(root) / f"{fname}.{ext}")) > 255:
+        
+        # Check length with nc extension first
+        if len(str(Path(root) / f"{fname}.nc")) > 255:
             ds_names = [str(ds[0]) for ds in key]
             fname = "_with_".join(ds_names)
 
-            if len(str(Path(root) / f"{fname}.{ext}")) > 255:
+            if len(str(Path(root) / f"{fname}.nc")) > 255:
                 fname = "validation"
-        self.outname = Path(root) / f"{fname}.{ext}"
-        return self.outname
+        
+        self.outname = Path(root) / f"{fname}.nc"
+        self.outname_zarr = Path(root) / f"{fname}.zarr"
+        
+        return self.outname, self.outname_zarr
 
     def write_to_netcdf(self,
                         path: str,
@@ -527,37 +532,6 @@ class Pytesmo2Qa4smResultsTranscriber:
                     if i < retry_count - 1:
                         time.sleep(1)
 
-        # for var in self.transcribed_dataset.data_vars:
-        #     # Check if the data type is Unicode (string type)
-        #     if self.transcribed_dataset[var].dtype.kind == 'U':
-        #         # Find the maximum string length in this variable
-        #         max_len = self.transcribed_dataset[var].str.len().max().item()
-        #
-        #         # Create a character array of shape (n, max_len), where n is the number of strings
-        #         char_array = np.array([
-        #             list(s.ljust(max_len))
-        #             for s in self.transcribed_dataset[var].values
-        #         ],
-        #                               dtype=f'S1')
-        #
-        #         # Create a new DataArray for the character array with an extra character dimension
-        #         self.transcribed_dataset[var] = xr.DataArray(
-        #             char_array,
-        #             dims=(self.transcribed_dataset[var].dims[0],
-        #                   f"{var}_char"),
-        #             coords={
-        #                 self.transcribed_dataset[var].dims[0]:
-        #                 self.transcribed_dataset[var].coords[
-        #                     self.transcribed_dataset[var].dims[0]]
-        #             },
-        #             attrs=self.transcribed_dataset[var].
-        #             attrs  # Preserve original attributes if needed
-        #         )
-
-        # Ensure the dataset is closed
-        if isinstance(self.transcribed_dataset, xr.Dataset):
-            self.transcribed_dataset.close()
-
         # Write the transcribed dataset to a new NetCDF file
         self.transcribed_dataset.to_netcdf(
             path=path,
@@ -566,6 +540,62 @@ class Pytesmo2Qa4smResultsTranscriber:
         )
 
         return path
+
+
+    def write_to_zarr_filtered(self,
+                            path: str,
+                            tsw_value: str,
+                            mode: str = 'w') -> str:
+        """
+        Write only the DEFAULT_TSW slice to zarr, directly from memory.
+
+        This mirrors the reliability of to_netcdf() by using the same 
+        in-memory dataset rather than re-reading from disk.
+
+        Parameters
+        ----------
+        path : str
+            Output zarr path
+        tsw_value : str
+            The temporal sub-window to extract (typically DEFAULT_TSW)
+        mode : str
+            Write mode, default 'w'
+
+        Returns
+        -------
+        str
+            Path to the zarr store
+        """
+        # Filter to single TSW - this is a VIEW, not a copy (minimal memory)
+        ds_filtered = self.transcribed_dataset.sel(
+            {TEMPORAL_SUB_WINDOW_NC_COORD_NAME: tsw_value}
+        )
+
+        # Drop the now-scalar TSW coordinate since it's just one value
+        ds_filtered = ds_filtered.drop_vars(TEMPORAL_SUB_WINDOW_NC_COORD_NAME)
+
+        # Build encoding - mimic what works for NetCDF
+        encoding = {}
+        for var in ds_filtered.variables:
+            if np.issubdtype(ds_filtered[var].dtype, np.number):
+                encoding[str(var)] = {
+                    'compressor': None,  # Or use zarr.Blosc() if you want compression
+                }
+        # Ensure the dataset is closed
+        if isinstance(self.transcribed_dataset, xr.Dataset):
+            self.transcribed_dataset.close()
+
+        # Write directly - NO dask, NO chunking, just like netcdf4 does it
+        ds_filtered.to_zarr(
+            store=path,
+            mode=mode,
+            encoding=encoding,
+            compute=True,
+            consolidated=True
+        )
+
+
+
 
     def compress(self,
                  path: str,
@@ -788,353 +818,6 @@ class Pytesmo2Qa4smResultsTranscriber:
             tsws = Pytesmo2Qa4smResultsTranscriber.get_tsws_from_pytesmo_ncfile(
                 ncfile)
         return sort_tsws(tsws)
-
-
-
-process = psutil.Process()
-
-def log_resources(tag):
-    """Write CPU and memory usage to logfile."""
-    cpu = psutil.cpu_percent(interval=None)
-    virt = psutil.virtual_memory()
-    rss = process.memory_info().rss / 1024**2
-    print(
-        f"[RES] {tag} CPU {cpu} percent RAM used {virt.percent} percent "
-        f"Avail {virt.available / 1024**2:.1f} MB ProcRSS {rss:.1f} MB"
-    )
-
-# def replace_status_values(arr, replace_map):
-#     """Replace values in an integer array according to a mapping dict."""
-#     result = arr.copy()
-#     for old_val, new_val in replace_map.items():
-#         result[arr == old_val] = new_val
-#     return result
-
-class ZarrTimeoutError(Exception):
-    """Custom timeout exception to avoid shadowing built-in TimeoutError."""
-    pass
-
-class NetCDFNotFoundError(Exception):
-    """Raised when the NetCDF file does not exist."""
-    pass
-
-
-
-def timeout_handler(signum, frame):
-    raise ZarrTimeoutError("Operation timed out")
-
-
-# ============================================================================
-# SUBPROCESS WORKER SCRIPT (embedded as string)
-# ============================================================================
-
-WORKER_SCRIPT = '''
-import sys
-import json
-import numpy as np
-import xarray as xr
-import dask
-
-def replace_status_values(data_array, replace_map):
-    """Replace values in a DataArray according to a mapping dict.
-
-    Works with the underlying numpy array to avoid xarray indexing limitations.
-    """
-    if not replace_map:
-        return data_array
-
-    # Extract values as numpy array
-    arr = data_array.values.copy()
-
-    # Perform replacement on numpy array (supports n-dimensional boolean indexing)
-    for old_val, new_val in replace_map.items():
-        arr[arr == old_val] = new_val
-
-    # Return a new DataArray with the modified values, preserving dims/coords/attrs
-    return xr.DataArray(
-        arr,
-        dims=data_array.dims,
-        coords=data_array.coords,
-        attrs=data_array.attrs,
-        name=data_array.name
-    )
-
-def process_variable(config):
-    nc_path = config["nc_path"]
-    zarr_path = config["zarr_path"]
-    var_name = config["var_name"]
-    mode = config["mode"]
-    include_coords = config["include_coords"]
-    chunk_size = tuple(config["chunk_size"]) if config["chunk_size"] else None
-    is_status_var = config["is_status_var"]
-    status_replace = config.get("status_replace", {})
-
-    # Open dataset with chunking for lazy loading
-    chunks = "auto"
-    ds = xr.open_dataset(nc_path, chunks=chunks)
-
-    if 'tsw' in ds.dims:
-        ds = ds.sel(tsw='bulk')
-
-    var_data = ds[var_name]
-
-    # Compute to load into memory (with synchronous scheduler)
-    with dask.config.set(scheduler="synchronous"):
-        var_computed = var_data.compute()
-
-    # Apply status value replacement if needed (AFTER compute)
-    if is_status_var and status_replace:
-        # Convert status_replace keys to int (JSON serializes dict keys as strings)
-        status_map = {int(k): v for k, v in status_replace.items()}
-        var_computed = replace_status_values(var_computed, status_map)
-
-    # Build dataset for this variable
-    if include_coords:
-        ds_single = xr.Dataset(
-            {var_name: var_computed},
-            coords=ds.coords
-        )
-    else:
-        # For append mode, only include the variable (not coords again)
-        ds_single = xr.Dataset({var_name: var_computed})
-
-    # Prepare encoding
-    encoding = {}
-    if chunk_size:
-        encoding[var_name] = {"chunks": chunk_size}
-
-    # Write to zarr
-    ds_single.to_zarr(
-        zarr_path,
-        mode=mode,
-        zarr_format=3,
-        consolidated=False,
-        safe_chunks=False,
-        encoding=encoding if encoding else None
-    )
-
-    ds.close()
-    print(f"SUCCESS: {var_name}")
-
-if __name__ == "__main__":
-    config = json.loads(sys.argv[1])
-    process_variable(config)
-'''
-
-
-class Qa4smResults2ZarrTranscriber:
-    """Transcriber for converting QA4SM results to Zarr v3 format using subprocess isolation.
-
-    IMPORTANT: Call save_zarr() only AFTER the NetCDF file has been fully created.
-    This class does NOT wait for file creation - it fails immediately if the file is missing.
-    """
-
-    def __init__(self, nc_filepath, out_dir):
-        """
-        Initialize transcriber.
-
-        Args:
-            nc_filepath: Path to the NetCDF file (must exist when save_zarr() is called)
-            out_dir: Directory where the Zarr store will be created
-        """
-        print("[ZARR-INIT] Creating transcriber")
-        log_resources("init")
-
-        self.nc_filepath = Path(nc_filepath)
-        self.out_dir = Path(out_dir)
-        self.zarr_filepath = self.out_dir / f"{self.nc_filepath.stem}.zarr"
-        self.ds = None
-
-        print(f"[ZARR-INIT] Source: {self.nc_filepath}")
-        print(f"[ZARR-INIT] Output: {self.zarr_filepath}")
-        log_resources("after_paths")
-
-    def _validate_netcdf_exists(self):
-        """Check that the NetCDF file exists and is readable. Fail fast if not."""
-        if not self.nc_filepath.exists():
-            raise NetCDFNotFoundError(
-                f"NetCDF file does not exist: {self.nc_filepath}. "
-                f"Ensure the validation process has completed before calling save_zarr()."
-            )
-
-        # Quick validation that file is readable
-        try:
-            with xr.open_dataset(self.nc_filepath) as test_ds:
-                var_count = len(test_ds.data_vars)
-            print(f"[ZARR] NetCDF validated: {var_count} variables found")
-        except Exception as e:
-            raise NetCDFNotFoundError(
-                f"NetCDF file exists but cannot be opened: {self.nc_filepath}. Error: {e}"
-            )
-
-    def _load_dataset(self):
-        """Load the dataset."""
-        if self.ds is None:
-            print("[ZARR] Loading dataset...")
-            self.ds = xr.open_dataset(self.nc_filepath, chunks="auto")
-            
-            # Select tsw dimension if it exists
-            if 'tsw' in self.ds.dims:
-                self.ds = self.ds.sel(tsw=DEFAULT_TSW)
-            
-            print(f"[ZARR] Dataset loaded: {len(self.ds.data_vars)} variables")
-        return self.ds
-
-    def _run_variable_subprocess(self, config):
-        """Run a subprocess to process a single variable."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
-            f.write(WORKER_SCRIPT)
-            script_path = f.name
-
-        try:
-            config_json = json.dumps(config)
-
-            result = subprocess.run(
-                [sys.executable, script_path, config_json],
-                capture_output=True,
-                text=True,
-                timeout=3600
-            )
-
-            if result.returncode != 0:
-                print(f"[ZARR] Subprocess failed for {config['var_name']}")
-                print(f"[ZARR] STDERR: {result.stderr}")
-                raise RuntimeError(f"Failed to process variable {config['var_name']}: {result.stderr}")
-
-            print(f"[ZARR] Subprocess output: {result.stdout.strip()}")
-            return True
-
-        except subprocess.TimeoutExpired:
-            print(f"[ZARR] Timeout processing variable {config['var_name']}")
-            raise
-        finally:
-            os.unlink(script_path)
-
-    def save_zarr(self):
-        """
-        Convert NetCDF to Zarr format.
-
-        IMPORTANT: The NetCDF file MUST exist before calling this method.
-        This method does NOT wait for file creation.
-
-        Returns:
-            Path to the created Zarr store.
-
-        Raises:
-            NetCDFNotFoundError: If the NetCDF file doesn't exist or is unreadable.
-        """
-        print("=" * 60)
-        print(f"[ZARR] Starting save_zarr at {time.strftime('%H:%M:%S')}")
-        print("=" * 60)
-
-        start_time = time.time()
-        log_resources("start")
-
-        # ========== STEP 1: Validate NetCDF exists (fail fast) ==========
-        self._validate_netcdf_exists()
-        log_resources("after_validation")
-
-        # ========== STEP 2: Load dataset ==========
-        self._load_dataset()
-        log_resources("after_load_dataset")
-
-        # ========== STEP 3: Prepare output ==========
-        self.out_dir.mkdir(parents=True, exist_ok=True)
-        log_resources("after_mkdir")
-
-        if self.zarr_filepath.exists():
-            print("[ZARR] Removing existing Zarr...")
-            shutil.rmtree(self.zarr_filepath)
-            log_resources("after_rm_old")
-
-        # ========== STEP 4: Filter variables ==========
-        variables_to_export = [
-            x for x in self.ds.data_vars
-            if x not in ['_row_size', 'gpi']
-        ]
-        print(f"[ZARR] Exporting {len(variables_to_export)} variables via subprocesses")
-        log_resources("after_var_filter")
-
-        chunk_sizes = {var: list(self.ds[var].shape) for var in variables_to_export}
-
-        # ========== STEP 5: Process variables in subprocesses ==========
-        failed_vars = []
-        for i, var_name in enumerate(variables_to_export, 1):
-            var_start = time.time()
-            print(f"[ZARR] [{i}/{len(variables_to_export)}] Processing {var_name} in subprocess...")
-            log_resources(f"before_subprocess_{var_name}")
-
-            mode = 'w' if i == 1 else 'a'
-            include_coords = (i == 1)
-            is_status_var = var_name.startswith('status_')
-
-            config = {
-                "nc_path": str(self.nc_filepath),
-                "zarr_path": str(self.zarr_filepath),
-                "var_name": var_name,
-                "mode": mode,
-                "include_coords": include_coords,
-                "chunk_size": chunk_sizes[var_name],
-                "is_status_var": is_status_var,
-                "status_replace": {str(k): v for k, v in status_replace.items()},
-            }
-
-            try:
-                self._run_variable_subprocess(config)
-                log_resources(f"after_subprocess_{var_name}")
-
-                var_elapsed = time.time() - var_start
-                print(f"[ZARR] {var_name} done in {var_elapsed:.2f}s")
-
-            except Exception as e:
-                print(f"[ZARR] Failed to process {var_name}: {e}")
-                failed_vars.append(var_name)
-
-                if i == 1:
-                    raise RuntimeError(f"First variable failed, cannot continue: {e}")
-                continue
-
-        if failed_vars:
-            print(f"[ZARR] Failed variables: {failed_vars}")
-
-        # ========== STEP 6: Consolidate metadata ==========
-        print("[ZARR] Consolidating metadata")
-        self._consolidate_metadata_v3()
-        log_resources("after_consolidation")
-
-        # ========== STEP 7: Report results ==========
-        total_size = sum(
-            os.path.getsize(os.path.join(dp, f))
-            for dp, _, fs in os.walk(self.zarr_filepath)
-            for f in fs
-        )
-        log_resources("after_size_calc")
-
-        elapsed = time.time() - start_time
-        print("=" * 60)
-        print("[ZARR] Complete")
-        print(f"[ZARR] Size {total_size / 1024**2:.2f} MB")
-        print(f"[ZARR] Time {elapsed:.2f}s")
-        print(f"[ZARR] Variables: {len(variables_to_export) - len(failed_vars)}/{len(variables_to_export)}")
-        print(f"[ZARR] Location {self.zarr_filepath}")
-        print("=" * 60)
-
-        log_resources("done")
-
-        if self.ds is not None:
-            self.ds.close()
-            self.ds = None
-
-        return self.zarr_filepath
-
-    def _consolidate_metadata_v3(self):
-        """Consolidate metadata using zarr v3 API."""
-        try:
-            store = zarr.storage.LocalStore(self.zarr_filepath)
-            zarr.consolidate_metadata(store)
-            print("[ZARR] Metadata consolidation OK")
-        except Exception as e:
-            print(f"[ZARR] Metadata consolidation skipped: {e}")
 
 
 if __name__ == '__main__':
