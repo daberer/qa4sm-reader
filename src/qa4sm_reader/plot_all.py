@@ -5,7 +5,7 @@ from typing import Union, List, Tuple, Dict
 from itertools import chain
 
 import pandas as pd
-from qa4sm_reader.netcdf_transcription import Pytesmo2Qa4smResultsTranscriber, Qa4smResults2ZarrTranscriber
+from qa4sm_reader.netcdf_transcription import Pytesmo2Qa4smResultsTranscriber
 from qa4sm_reader.plotter import QA4SMPlotter, QA4SMCompPlotter
 from qa4sm_reader.img import QA4SMImg
 import qa4sm_reader.globals as globals
@@ -161,7 +161,7 @@ def plot_all(filepath: str,
                          f"but `{save_metadata}` was passed.")
 
     # initialise image and plotter
-    fnames_bplot, fnames_mapplot, fnames_csv, fnames_zarr = [], [], [], []
+    fnames_bplot, fnames_mapplot, fnames_csv = [], [], []
 
     comparison_periods = None
     if temporal_sub_windows is None:
@@ -189,14 +189,6 @@ def plot_all(filepath: str,
 
         if metrics is None:
             metrics = img.metrics
-
-        if save_zarr:
-            zarr_transcriber = Qa4smResults2ZarrTranscriber(
-                nc_filepath=filepath,
-                out_dir=Path(out_dir))
-
-            out_zarr = zarr_transcriber.save_zarr()
-            fnames_zarr.append(out_zarr)
 
         # iterate metrics and create files in output directory
         for metric in metrics:
@@ -261,7 +253,7 @@ def plot_all(filepath: str,
     #             plt.close(_fig)
     #             fnames_cbplot.extend(spth)
 
-    return fnames_bplot, fnames_mapplot, fnames_csv, fnames_cbplot, fnames_zarr
+    return fnames_bplot, fnames_mapplot, fnames_csv, fnames_cbplot
 
 
 def get_img_stats(
