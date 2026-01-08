@@ -44,7 +44,7 @@ dependencies = [
     "scipy",
     "seaborn",
     "xarray>=2024.0.0",
-    "zarr==3.0.7",
+    "zarr",
 ]
 dynamic = ["version"]
 
