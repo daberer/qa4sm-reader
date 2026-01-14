@@ -577,15 +577,20 @@ class Pytesmo2Qa4smResultsTranscriber:
         # Build encoding - mimic what works for NetCDF
         encoding = {}
         for var in ds_filtered.variables:
+            # Replace values in status variables
+            if str(var).startswith('status'):
+                data = ds_filtered[var].values.copy()
+                for old, new in status_replace.items():
+                    data[data == old] = new
+                ds_filtered[var] = (ds_filtered[var].dims, data, ds_filtered[var].attrs)
+
             if np.issubdtype(ds_filtered[var].dtype, np.number):
-                encoding[str(var)] = {
-                    'compressor': None,  # Or use zarr.Blosc() if you want compression
-                }
+                encoding[str(var)] = {'compressor': None}
         # Ensure the dataset is closed
         if isinstance(self.transcribed_dataset, xr.Dataset):
             self.transcribed_dataset.close()
 
-        # Write directly - NO dask, NO chunking, just like netcdf4 does it
+        # Write directly - NO dask, NO chunking, just like netcdf4
         ds_filtered.to_zarr(
             store=path,
             mode=mode,
