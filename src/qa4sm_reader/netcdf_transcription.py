@@ -8,8 +8,6 @@ import shutil
 import tempfile
 import sys
 from pathlib import Path
-import subprocess, zarr, json
-import psutil
 from qa4sm_reader.intra_annual_temp_windows import TemporalSubWindowsCreator, InvalidTemporalSubWindowError
 from qa4sm_reader.globals import    METRICS, TC_METRICS, STABILITY_METRICS, NON_METRICS, METADATA_TEMPLATE, \
                                     IMPLEMENTED_COMPRESSIONS, ALLOWED_COMPRESSION_LEVELS, \
@@ -544,7 +542,7 @@ class Pytesmo2Qa4smResultsTranscriber:
 
     def write_to_zarr_filtered(self,
                             path: str,
-                            tsw_value: str,
+                            tsw_value: str = DEFAULT_TSW,
                             mode: str = 'w') -> str:
         """
         Write only the DEFAULT_TSW slice to zarr, directly from memory.
@@ -566,13 +564,11 @@ class Pytesmo2Qa4smResultsTranscriber:
         str
             Path to the zarr store
         """
-        # Filter to single TSW - this is a VIEW, not a copy (minimal memory)
-        ds_filtered = self.transcribed_dataset.sel(
-            {TEMPORAL_SUB_WINDOW_NC_COORD_NAME: tsw_value}
-        )
-
-        # Drop the now-scalar TSW coordinate since it's just one value
-        ds_filtered = ds_filtered.drop_vars(TEMPORAL_SUB_WINDOW_NC_COORD_NAME)
+        # Filter to single TSW if the coord exists
+        if tsw_value and TEMPORAL_SUB_WINDOW_NC_COORD_NAME in self.transcribed_dataset.coords:
+            ds_filtered = self.transcribed_dataset.sel({TEMPORAL_SUB_WINDOW_NC_COORD_NAME: tsw_value}).drop_vars(TEMPORAL_SUB_WINDOW_NC_COORD_NAME)
+        else:
+            ds_filtered = self.transcribed_dataset
 
         # Build encoding - mimic what works for NetCDF
         encoding = {}

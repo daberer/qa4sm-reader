@@ -23,28 +23,21 @@ keywords = []
 dependencies = [
     "cartopy>=0.23.0",
     "colorcet",
-    "dask",
     "h5netcdf",
     'importlib-metadata; python_version<"3.8"',
-    "xarray",
-    "pandas",
-    "numpy",
     "netcdf4<1.7.3",
     "h5netcdf",
     "h5py",
     "matplotlib",
-    "netcdf4",
     "numpy",
     "pandas",
     "parse",
-    "psutil",
     "pygeogrids",
     "pyQt5",
     "pytesmo",
     "scipy",
     "seaborn",
-    "xarray>=2024.0.0",
-    "zarr",
+    "xarray>=2024.0.0"
 ]
 dynamic = ["version"]
 
