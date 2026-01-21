@@ -37,7 +37,8 @@ dependencies = [
     "pytesmo",
     "scipy",
     "seaborn",
-    "xarray>=2024.0.0"
+    "xarray>=2024.0.0",
+    "zarr"
 ]
 dynamic = ["version"]
 
