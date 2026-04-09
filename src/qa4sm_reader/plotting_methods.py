@@ -48,28 +48,6 @@ import warnings
 import os
 from collections import namedtuple
 
-import textwrap
-
-# Change of standard matplotlib parameters
-matplotlib.rcParams['legend.framealpha'] = globals.legend_alpha
-plt.rcParams['hatch.linewidth'] = globals.hatch_linewidth
-# Change of standard seaborn boxplot parameters through monkeypatching
-_old_boxplot = sns.boxplot
-
-def custom_boxplot(*args, **kwargs):
-    defaults = dict(
-        boxprops=dict(edgecolor=globals.boxplot_edgecolor, linewidth=globals.boxplot_edgewidth),
-        whiskerprops=dict(color=globals.boxplot_edgecolor, linewidth=globals.boxplot_edgewidth),
-        capprops=dict(color=globals.boxplot_edgecolor, linewidth=globals.boxplot_edgewidth),
-        medianprops=dict(color=globals.boxplot_edgecolor, linewidth=globals.boxplot_edgewidth),
-    )
-    for k, v in defaults.items():
-        if k in kwargs:
-            defaults[k].update(kwargs.pop(k))
-    return _old_boxplot(*args, **kwargs, **defaults)
-
-sns.boxplot = custom_boxplot
-
 # Change of standard matplotlib parameters
 matplotlib.rcParams['legend.framealpha'] = globals.legend_alpha
 plt.rcParams['hatch.linewidth'] = globals.hatch_linewidth
