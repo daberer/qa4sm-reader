@@ -27,7 +27,7 @@ dpi_min = 100  # Resolution in which plots are going to be rendered.
 dpi_max = 200
 title_pad = 12  # Padding below the title in points. default padding is matplotlib.rcParams['axes.titlepad'] = 6.0
 data_crs = ccrs.PlateCarree()  # Default map projection. use one of
-legend_alpha = 0.7
+legend_alpha = 0.85
 ci_alpha = 0.4
 
 palette = sns.color_palette("Set2") #seaborn color palette used for dataset combination --> colors.py, colorblindfriendly options "Set2", "Dark2", "colorblind", ("Paired" not really useable in this case)
@@ -51,6 +51,24 @@ ax_left = 0.2
 ax_bottom = 0.15
 ax_width = 0.75
 ax_height = 0.8
+
+# === timeseries plot defaults ===
+n_gpi_in_timeplot = False #Determines if number of observations is presented in every timeseries plot
+n_gpi_kind = "opacity-intensity" # Determines how observation information is presented in every timeplot
+ts_figwidth = 12  # size of the output figure in inches.
+ts_figheight_per_ax = 3
+
+ts_pad = 3 #relative size of vertical and horizontal padding
+ts_axh = 50 #size of axheight in relation to padding size 
+ts_axw = 150 #size of axwidth in relation to padding size 
+
+ts_linewidth=1.6 #linewidth of timeseries plots
+
+# Size of Points in Scatterplot
+ts_scattersize=8
+ts_scattersize_intensity=16
+ts_min_scattersize=4
+ts_max_scattersize=36
 
 # === map plot defaults ===
 scattered_datasets = [
@@ -286,6 +304,7 @@ _colormaps = {  # from /qa4sm/validator/validation/graphics.py
     'slopeR': _cclasses['div_slopeR'],
     'slopeURMSD': _cclasses['div_slopeURMSD'],
     'slopeBIAS': _cclasses['div_slopeBIAS'],
+    None: _cclasses['seq_better'], # default if None is the 
 }
 
 # Colorbars for difference plots
@@ -391,6 +410,7 @@ _metric_value_ranges = {  # from /qa4sm/validator/validation/graphics.py
     'slopeR': [None, None],
     'slopeURMSD': [None, None],
     'slopeBIAS': [None, None],
+    None: [0, None]
 }
 # mask values out of range
 _metric_mask_range = {

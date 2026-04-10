@@ -424,8 +424,7 @@ class Pytesmo2Qa4smResultsTranscriber:
 
         return self.transcribed_dataset
 
-
-    def build_outname(self, root: str, keys: List[Tuple[str]]) -> Tuple[Path, Path]:
+    def build_outname(self, root: str, keys: List[Tuple[str]], val_type="temporal") -> str:
         """
         Build the output names for the NetCDF and Zarr files. Slight alteration of the original function from pytesmo
         `pytesmo.validation_framework.results_manager.build_filename`.
@@ -436,6 +435,9 @@ class Pytesmo2Qa4smResultsTranscriber:
             The root path, where the file is to be written to.
         keys : List[Tuple[str]]
             The keys of the pytesmo results.
+        val_type : str
+            Either "spatial" or "temporal". Determines if the file contains spatial or temporal 
+            validation results.
 
         Returns
         -------
@@ -461,11 +463,12 @@ class Pytesmo2Qa4smResultsTranscriber:
 
             if len(str(Path(root) / f"{fname}.nc")) > 255:
                 fname = "validation"
-        
-        self.outname = Path(root) / f"{fname}.nc"
-        self.outname_zarr = Path(root) / f"{fname}.zarr"
-        
-        return self.outname, self.outname_zarr
+        if val_type=="temporal":
+            self.outname = Path(root) / f"{fname}.{ext}"
+            return self.outname
+        elif val_type=="spatial":
+            self.outname = Path(root) / f"{fname}.SPATIAL.{ext}"
+            return self.outname
 
     def write_to_netcdf(self,
                         path: str,

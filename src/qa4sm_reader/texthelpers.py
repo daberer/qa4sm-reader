@@ -112,7 +112,7 @@ def best_legend_pos_exclude_list(ax, forbidden_locs= globals.leg_loc_forbidden):
     best_loc_str = {v:k for k,v in locs.items()}[best_loc]
     return best_loc_str
 
-def get_dataset_dict(Var) -> dict:
+def get_dataset_dict(Var, type="legend") -> dict:
     """
     Creates dict containing dataset ids as keys and pretty name (version) as values.
     version only gets appended if there are multiple datasets witth the same pretty name.
@@ -121,14 +121,21 @@ def get_dataset_dict(Var) -> dict:
     ----------
     Var : QA4SMMetricVariable
         Var in the image to make the map for.
+    type: str, optional
+        Determines wheter short names or pretty names are listed in the resulting dictionary
 
     Returns
     -------
     d : dict
         Dict containing id:f"{pretty_name+(version)}" key-value pairs.
     """
-    dataset_ref = {Var.Datasets.ref_id:f"{Var.Datasets.ref["pretty_name"]}"}
-    dataset_others = {Var.Datasets.others_id[i]:f"{Var.Datasets.others[i]["pretty_name"]}" for i in range(len(Var.Datasets.others))}
+    if type=="legend":
+        dataset_ref = {Var.Datasets.ref_id:f"{Var.Datasets.ref["pretty_name"]}"}
+        dataset_others = {Var.Datasets.others_id[i]:f"{Var.Datasets.others[i]["pretty_name"]}" for i in range(len(Var.Datasets.others))}
+    elif type=="save_name":
+        dataset_ref = {Var.Datasets.ref_id:f"{Var.Datasets.ref["short_name"]}"}
+        dataset_others = {Var.Datasets.others_id[i]:f"{Var.Datasets.others[i]["short_name"]}" for i in range(len(Var.Datasets.others))}
+
     d = dataset_ref | dataset_others
     # Append version number if there are multiple datasets with the same pretty name
     groups = {}
@@ -138,7 +145,10 @@ def get_dataset_dict(Var) -> dict:
     for i in groups.keys():
         if len(groups[i])>1: 
             for j in groups[i]:
-                d[j] = d[j]+f" ({Var.Datasets.dataset_metadata(j)[1]["pretty_version"]})"
+                if type=="legend":
+                    d[j] = d[j]+f" ({Var.Datasets.dataset_metadata(j)[1]["pretty_version"]})"
+                elif type=="save_name":
+                    d[j] = d[j]+f"_({Var.Datasets.dataset_metadata(j)[1]["pretty_version"]})"
     return d
 
 def get_legend_title(Var) -> str:
@@ -165,7 +175,7 @@ def get_legend_title(Var) -> str:
     legend_title = "Datasets:\n" + "\n".join(f"{k}: {v}" for k, v in (d).items())
     return legend_title
 
-def append_legend_title(fig, ax, Var) -> tuple:
+def append_legend_title(fig, ax, Var, loc=None) -> tuple:
     """
     Appends a title to an existing legend from a QA4SMMetricVariable.
 
@@ -177,6 +187,10 @@ def append_legend_title(fig, ax, Var) -> tuple:
         The subplot axis containing the legend to modify.
     Var : QA4SMMetricVariable
         Variable object used to construct the legend title.
+    loc: str, optional: default=None
+        String that determines placement of legend, if 'None' 
+        gets moved to least overlapping position according to 
+        'best_legend_pos_exclude_list'.
 
     Returns
     -------
@@ -184,7 +198,11 @@ def append_legend_title(fig, ax, Var) -> tuple:
         The same figure and axis, with the legend title updated.
     """  
     legend = ax.get_legend()
-    legend_title = get_legend_title(Var)
+    if len(legend.get_title().get_text())>0:
+        # Appends preexisting title if there is one
+        legend_title = legend.get_title().get_text()+"\n"+get_legend_title(Var)
+    else:
+        legend_title = get_legend_title(Var)
 
     # Change Size to same as rest of legend
     if len(legend.legend_handles) == 0:
@@ -192,13 +210,12 @@ def append_legend_title(fig, ax, Var) -> tuple:
     else:
         fs = legend.get_texts()[0].get_fontsize()
         legend.set_title(legend_title, prop={'size': fs})
-
     legend._legend_box.align = "left"
-    best_loc_with_title = best_legend_pos_exclude_list(ax)
-
-    # Step 4: move legend to new best position
-    legend.set_loc(best_loc_with_title)
-
+    if not loc:
+        best_loc_with_title = best_legend_pos_exclude_list(ax)
+        legend.set_loc(best_loc_with_title)
+    else:
+        legend.set_loc(loc)
     return fig, ax
 
 def smart_suptitle(fig, pad=globals.fontsize_title/1.5):
@@ -282,10 +299,10 @@ def smart_suplabel(fig, axis, pad=globals.fontsize_label/2):
                 left_positions.append(min(b.x0 for b in all_bboxes_fig))
 
         if left_positions:
-            x = min(left_positions) - globals.fontsize_label/(72*fig.get_figwidth()) - pad/(72*fig.get_figheight()) 
+            x = min(left_positions) - globals.fontsize_label/(72*fig.get_figwidth()) - pad/(72*fig.get_figwidth()) 
         else:
             x = 0.01  # fallback
-        y = np.mean([(ax.get_position().y0+ax.get_position().y1)/2 for ax in fig.get_axes()[::globals.n_col_agg]])
+        y = np.mean(list(set([(ax.get_position().y0+ax.get_position().y1)/2 for ax in fig.get_axes()])))
         return x, y
     else: #fallback
         return 0.01, 0.01
