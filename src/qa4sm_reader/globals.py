@@ -933,6 +933,9 @@ _metadata_exclude = [
     'slopeR',
     'slopeURMSD',
     'slopeBIAS',
+    'snr',
+    'err_std',
+    'beta',
 ]
 
 METRIC_TEMPLATE = '_between_{ds1}_and_{ds2}'
