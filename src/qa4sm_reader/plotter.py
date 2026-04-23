@@ -170,7 +170,16 @@ class QA4SMPlotter:
             parts.extend([d[mds[0]]])
         elif type == 'mapplot_tc':
             parts.extend([d[mds[0]]])
-            for dss in Var.other_dss:
+            
+            # Title fix for TC mapplots: when mds in other_dss, replace with ref.
+            # Will not work when all combinations also without sref are to be calculated in the future
+            other_dss = list(Var.other_dss)
+            if mds in other_dss:
+                idx = other_dss.index(mds)
+                other_dss.pop(idx)
+                other_dss.insert(idx, ref)
+            
+            for dss in other_dss:
                 parts.extend([d[dss[0]]])
 
         return parts

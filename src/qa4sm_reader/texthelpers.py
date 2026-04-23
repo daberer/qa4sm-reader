@@ -148,7 +148,7 @@ def get_dataset_dict(Var, type="legend") -> dict:
                 if type=="legend":
                     d[j] = d[j]+f" ({Var.Datasets.dataset_metadata(j)[1]["pretty_version"]})"
                 elif type=="save_name":
-                    d[j] = d[j]+f"_({Var.Datasets.dataset_metadata(j)[1]["pretty_version"]})"
+                    d[j] = d[j]+f"_({Var.Datasets.dataset_metadata(j)[1]["pretty_version"].replace('.', '_')})"
     return d
 
 def get_legend_title(Var) -> str:
